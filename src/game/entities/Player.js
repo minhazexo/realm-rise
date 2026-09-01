@@ -263,6 +263,13 @@ export default class Player {
   die() {
     const S = GameState.s;
     if (S.session_dead) return;
+    // Defensive: even if some future code path forgets the isImmortal() check
+    // before calling die(), immortal mode prevents death outright.
+    if (isImmortal()) {
+      S.player.hp = Math.max(1, S.player.hp || 1);
+      GameState.notify('PLAYER');
+      return;
+    }
     S.session_dead = true;
     S.player.gold -= Math.floor(S.player.gold * 0.12);
     S.stats.deaths = (S.stats.deaths || 0) + 1;

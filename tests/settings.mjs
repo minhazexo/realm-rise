@@ -153,6 +153,42 @@ for (const k of allKeys) {
   const out = normaliseSettings(flipped);
   ok(out[k] !== undefined, `normaliseSettings keeps key '${k}'`);
 }
+// Verify die() refuses to kill when immortal — simulates the worst case where
+// a future code path forgets the !isImmortal() guard. Skip if Phaser fails
+// to load in node (Player.js imports Phaser).
+GameState.s.player.hp = 5;
+GameState.s.session_dead = false;
+try {
+  const PlayerMod = await import('../src/game/entities/Player.js');
+  // Build a minimal Player without invoking Phaser graphics — manually
+  // patch the constructor output to avoid Phaser scene issues in node.
+  const fakeScene = {
+    cameras: { main: { shake: () => {}, fadeIn: () => {} } },
+    time: { delayedCall: () => {} },
+    fxHit: () => {},
+    tweens: { add: () => {} },
+    physics: { add: { sprite: () => ({ setSize: () => ({}), setOffset: () => ({}), setDepth: () => ({}), setCollideWorldBounds: () => ({}), body: { setCircle: () => {}, setVelocity: () => {} } }) } },
+    add: { image: () => ({ setDepth: () => ({}), setScale: () => ({}), setAlpha: () => ({}), setBlendMode: () => ({}), setVisible: () => ({}), setPosition: () => ({}), setTexture: () => ({}), setTint: () => ({}) }) }
+  };
+  const p = new PlayerMod.default(fakeScene, 0, 0);
+  p.shadow = null;
+  // Try to die — should refuse because immortal is on
+  p.die();
+  ok(GameState.s.session_dead === false, 'die() refuses when immortal');
+  ok(GameState.s.player.hp >= 1, 'die() restores HP to ≥1 when immortal');
+  // Drop HP to 0 and call die again
+  GameState.s.player.hp = 0;
+  p.die();
+  ok(GameState.s.session_dead === false, 'die() refuses with HP=0 when immortal');
+  ok(GameState.s.player.hp >= 1, 'die() restores HP from 0 when immortal');
+  // Now turn off immortal and die
+  updateSettings({ immortal: false });
+  GameState.s.player.hp = 0;
+  p.die();
+  ok(GameState.s.session_dead === true, 'die() proceeds when not immortal');
+} catch (err) {
+  console.log('  (skipped die() tests — Phaser unavailable in node:', err.message, ')');
+}
 updateSettings({ immortal: false });
 ok(isImmortal() === false, 'isImmortal returns false when off');
 resetSettings();

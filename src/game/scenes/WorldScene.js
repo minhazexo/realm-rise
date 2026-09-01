@@ -143,6 +143,19 @@ export default class WorldScene extends Phaser.Scene {
   update(time, delta) {
     const S = GameState.s;
     if (!S) return;
+    // Immortal (test-only): keep the player alive even if session_dead was set
+    // before the toggle was flipped on. Runs BEFORE the death-skip check.
+    if (S.settings?.immortal === true) {
+      if ((S.player.hp || 0) < 1) S.player.hp = 1;
+      if (S.session_dead) {
+        S.session_dead = false;
+        if (this.player?.sprite) {
+          this.player.sprite.setVisible(true);
+          if (this.player.shadow) this.player.shadow.setVisible(true);
+          if (this.player.sprite.body) this.player.sprite.body.enable = true;
+        }
+      }
+    }
     const dt = Math.min(0.05, delta / 1000);
     this.env.update(dt);
     if (!S.session_dead) this.player.update(dt, this.envContextInput());
