@@ -26,38 +26,68 @@ export default class EnvSystem {
   create() {
     const w = this.scene.scale.width;
     const h = this.scene.scale.height;
-    this.darkLayer = this.scene.add.rectangle(0, 0, w, h, 0x0a0f18, 0).setOrigin(0).setDepth(4000).setScrollFactor(0);
+
+    // Night darkness overlay (tinted blue-black for richer nights)
+    this.darkLayer = this.scene.add.rectangle(0, 0, w, h, 0x080e1a, 0)
+      .setOrigin(0).setDepth(4000).setScrollFactor(0);
+
+    // Warm dawn/dusk color grade overlay
+    this.gradeLayer = this.scene.add.rectangle(0, 0, w, h, 0xff8844, 0)
+      .setOrigin(0).setDepth(3998).setScrollFactor(0).setBlendMode('ADD');
+
+    // Richer star field
     this.starLayer = this.scene.add.graphics().setDepth(4001).setScrollFactor(0).setAlpha(0);
-    for (let i = 0; i < 80; i++) {
-      this.starLayer.fillStyle(0xffffff, 0.3 + Math.random() * 0.6);
-      this.starLayer.fillRect(Math.random() * w, Math.random() * h * 0.6, 1.5, 1.5);
+    this._stars = [];
+    for (let i = 0; i < 140; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h * 0.62;
+      const r = 0.7 + Math.random() * 1.6;
+      const a = 0.25 + Math.random() * 0.7;
+      this._stars.push({ x, y, r, a, phase: Math.random() * Math.PI * 2, spd: 0.6 + Math.random() * 2 });
+      this.starLayer.fillStyle(0xffffff, a);
+      this.starLayer.fillCircle(x, y, r);
     }
-    // Cinematic vignette: soft darkening toward the screen edges adds depth.
+
+    // Cinematic vignette
     if (!this.scene.textures.exists('fx_vignette')) {
       const { canvas, ctx } = EnvSystem.makeCanvas(256, 256);
-      const grad = ctx.createRadialGradient(128, 128, 78, 128, 128, 128);
+      const grad = ctx.createRadialGradient(128, 128, 70, 128, 128, 128);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+      grad.addColorStop(0.65, 'rgba(0,0,0,0.12)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.62)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 256, 256);
       this.scene.textures.addCanvas('fx_vignette', canvas);
     }
     this.vignette = this.scene.add.image(0, 0, 'fx_vignette').setOrigin(0).setDepth(4195).setScrollFactor(0);
     this.posVignette();
-    // Low-health danger vignette — pulses red when HP is critical
+
+    // Low-health danger vignette
     if (!this.scene.textures.exists('fx_danger_vignette')) {
       const { canvas, ctx } = EnvSystem.makeCanvas(256, 256);
       const grad = ctx.createRadialGradient(128, 128, 40, 128, 128, 128);
       grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(0.6, 'rgba(180,30,20,0)');
-      grad.addColorStop(1, 'rgba(180,30,20,0.7)');
+      grad.addColorStop(0.55, 'rgba(180,30,20,0)');
+      grad.addColorStop(1, 'rgba(180,30,20,0.75)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 256, 256);
       this.scene.textures.addCanvas('fx_danger_vignette', canvas);
     }
-    this.dangerVignette = this.scene.add.image(0, 0, 'fx_danger_vignette').setOrigin(0).setDepth(4196).setScrollFactor(0).setAlpha(0);
-    this.sunSprite = this.scene.add.image(w - 100, 70, 'proj_fireball').setScrollFactor(0).setDepth(4001).setBlendMode('ADD').setAlpha(0.55);
-    this.skyGlow = this.scene.add.image(w / 2, h / 2, 'fx_light').setScrollFactor(0).setDepth(3999).setBlendMode('ADD').setAlpha(0.12).setDisplaySize(w * 2, h * 2);
+    this.dangerVignette = this.scene.add.image(0, 0, 'fx_danger_vignette')
+      .setOrigin(0).setDepth(4196).setScrollFactor(0).setAlpha(0);
+
+    // Sun / moon
+    this.sunSprite = this.scene.add.image(w - 100, 70, 'proj_fireball')
+      .setScrollFactor(0).setDepth(4001).setBlendMode('ADD').setAlpha(0.55);
+
+    // Ambient sky fill light
+    this.skyGlow = this.scene.add.image(w / 2, h / 2, 'fx_light')
+      .setScrollFactor(0).setDepth(3999).setBlendMode('ADD')
+      .setAlpha(0.12).setDisplaySize(w * 2.2, h * 2.2);
+
+    // Night fireflies (spawned when night begins)
+    this.fireflyEmitter = null;
+
     this.weatherTimer = 18 + Math.random() * 40;
   }
 
@@ -181,14 +211,73 @@ export default class EnvSystem {
 
     const t = S.world.timeOfDay;
     const isNight = t > DUSK || t < DAWN;
-    const smoothDay = t >= DAWN && t <= DUSK ? Math.max(0, 1 - Math.abs(t - ((DAWN + DUSK) / 2)) / (DUSK - DAWN) * 2) : 0;
-    this.darkLayer.setAlpha(Math.max(0, 0.85 - smoothDay * 0.85));
-    this.starLayer.setAlpha(isNight ? 1 : 0);
-    this.sunSprite.setAlpha(isNight ? 0.35 : 0.55).setScale(isNight ? 2.6 : 3.5);
-    // Ambient sky glow breathes with the time of day (warm day, cool night).
+
+    // Smooth day strength (peaks at noon)
+    const mid = (DAWN + DUSK) / 2;
+    const half = (DUSK - DAWN) / 2;
+    const smoothDay = t >= DAWN && t <= DUSK
+      ? Math.max(0, 1 - Math.abs(t - mid) / half)
+      : 0;
+
+    // Dawn / dusk warmth factor (peaks near DAWN and DUSK)
+    const dawnProx = 1 - Math.min(1, Math.abs(t - DAWN) / 0.08);
+    const duskProx = 1 - Math.min(1, Math.abs(t - DUSK) / 0.08);
+    const goldenHour = Math.max(0, dawnProx, duskProx);
+
+    // Night darkness — deeper and cooler
+    this.darkLayer.setFillStyle(0x080e1a);
+    this.darkLayer.setAlpha(Math.max(0, 0.88 - smoothDay * 0.88));
+
+    // Golden-hour color grade
+    if (this.gradeLayer) {
+      this.gradeLayer.setFillStyle(t < mid ? 0xff9966 : 0xff7744);
+      this.gradeLayer.setAlpha(goldenHour * 0.14);
+    }
+
+    // Stars fade in/out smoothly + twinkle
+    const starTarget = isNight ? 1 : 0;
+    const starLerp = Math.min(1, dt * 1.8);
+    this.starLayer.setAlpha(this.starLayer.alpha + (starTarget - this.starLayer.alpha) * starLerp);
+    if (isNight && this._stars && this._frame % 3 === 0) {
+      this.starLayer.clear();
+      const now = performance.now() * 0.001;
+      for (const s of this._stars) {
+        const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(now * s.spd + s.phase));
+        this.starLayer.fillStyle(0xffffff, s.a * tw * this.starLayer.alpha);
+        this.starLayer.fillCircle(s.x, s.y, s.r);
+      }
+    }
+
+    // Sun by day / moon by night
+    this.sunSprite
+      .setAlpha(isNight ? 0.4 : 0.6 + smoothDay * 0.15)
+      .setScale(isNight ? 2.8 : 3.2 + smoothDay * 0.6)
+      .setTint(isNight ? 0xc8d8ff : 0xffe8a0);
+
+    // Ambient sky glow
     if (this.skyGlow) {
-      this.skyGlow.setTint(isNight ? 0x2840a0 : 0xffcf8a);
-      this.skyGlow.setAlpha(isNight ? 0.16 : 0.1);
+      this.skyGlow.setTint(isNight ? 0x203868 : goldenHour > 0.2 ? 0xffb070 : 0xffe0a8);
+      this.skyGlow.setAlpha(isNight ? 0.18 : 0.08 + smoothDay * 0.06 + goldenHour * 0.08);
+    }
+
+    // Night fireflies
+    if (isNight && !this.fireflyEmitter && this.scene.textures.exists('pt_firefly')) {
+      const sw = this.scene.scale.width, sh = this.scene.scale.height;
+      this.fireflyEmitter = this.scene.add.particles(0, 0, 'pt_firefly', {
+        x: { min: 0, max: sw },
+        y: { min: sh * 0.35, max: sh * 0.9 },
+        lifespan: { min: 2500, max: 5000 },
+        speedX: { min: -10, max: 10 },
+        speedY: { min: -8, max: 4 },
+        scale: { start: 0.55, end: 0 },
+        alpha: { start: 0.8, end: 0 },
+        quantity: 1,
+        frequency: 350,
+        blendMode: 'ADD'
+      }).setDepth(3905).setScrollFactor(0);
+    } else if (!isNight && this.fireflyEmitter) {
+      this.fireflyEmitter.destroy();
+      this.fireflyEmitter = null;
     }
 
     const biome = biomeAt(this.scene.player.sprite.x, this.scene.player.sprite.y);

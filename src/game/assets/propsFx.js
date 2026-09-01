@@ -178,20 +178,20 @@ export function buildMenuProps(scene) {
 
   // ── Cloud ─────────────────────────────────────────────────────────────
 
-  single(scene, 'menu_cloud', 220, 90, (ctx) => {
-    /** Render a single soft cloud puff. */
+  single(scene, 'menu_cloud', 260, 100, (ctx) => {
     const puff = (x, y, r, a) => {
-      const g = ctx.createRadialGradient(x, y, 4, x, y, r);
-      g.addColorStop(0, `rgba(226,232,240,${a})`);
-      g.addColorStop(1, 'rgba(226,232,240,0)');
+      const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+      g.addColorStop(0, `rgba(210,220,235,${a})`);
+      g.addColorStop(0.5, `rgba(190,205,225,${a * 0.5})`);
+      g.addColorStop(1, 'rgba(180,195,220,0)');
       ctx.fillStyle = g;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     };
-    // [x, y, radius]
     [
-      [60, 52, 38], [110, 44, 30],
-      [160, 50, 34], [92, 62, 26],
-    ].forEach(([x, y, r]) => puff(x, y, r, 0.85));
+      [70, 55, 42], [125, 42, 36],
+      [180, 52, 40], [100, 68, 28],
+      [155, 65, 24], [50, 48, 22],
+    ].forEach(([x, y, r]) => puff(x, y, r, 0.75));
   });
 
   // ── Hill silhouettes (3 depth layers) ─────────────────────────────────
@@ -219,52 +219,92 @@ export function buildMenuProps(scene) {
       ctx.fill();
     });
 
-  hillLayer('menu_hills_far', '#2a3140', 130);
-  hillLayer('menu_hills_mid', '#222a37', 90);
-  hillLayer('menu_hills_near', '#181f29', 60);
+  hillLayer('menu_hills_far', '#252d3c', 140);
+  hillLayer('menu_hills_mid', '#1c2432', 100);
+  hillLayer('menu_hills_near', '#141b26', 70);
 
-  // ── Castle silhouette ─────────────────────────────────────────────────
+  // ── Castle silhouette (richer detail) ─────────────────────────────────
 
-  single(scene, 'menu_castle', 340, 260, (ctx, w, h) => {
-    ctx.fillStyle = '#131a24';
+  single(scene, 'menu_castle', 380, 280, (ctx, w, h) => {
+    const base = '#101820';
+    const mid = '#161e28';
+    const accent = '#1a2430';
 
-    /**
-     * Draw a single castle tower.
-     * @param {number} x   Left edge.
-     * @param {number} tw  Tower width.
-     * @param {number} th  Tower height.
-     */
-    const tower = (x, tw, th) => {
+    const tower = (x, tw, th, roofH = 28) => {
+      // body with slight gradient feel via layered rects
+      ctx.fillStyle = base;
       ctx.fillRect(x, h - th, tw, th);
-      // pointed roof
+      ctx.fillStyle = mid;
+      ctx.fillRect(x + 2, h - th, 3, th);
+      // roof
+      ctx.fillStyle = base;
       ctx.beginPath();
-      ctx.moveTo(x - 4, h - th);
-      ctx.lineTo(x + tw / 2, h - th - 26);
-      ctx.lineTo(x + tw + 4, h - th);
+      ctx.moveTo(x - 5, h - th);
+      ctx.lineTo(x + tw / 2, h - th - roofH);
+      ctx.lineTo(x + tw + 5, h - th);
       ctx.closePath();
       ctx.fill();
       // battlements
-      for (let b = 0; b < tw; b += 12) {
-        ctx.fillRect(x + b, h - th - 8, 7, 8);
+      for (let b = 0; b < tw; b += 11) {
+        ctx.fillRect(x + b, h - th - 9, 7, 9);
+      }
+      // small flag pole on tall towers
+      if (th > 150) {
+        ctx.fillStyle = '#2a3340';
+        ctx.fillRect(x + tw / 2 - 1, h - th - roofH - 18, 2, 18);
+        ctx.fillStyle = 'rgba(200,60,50,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(x + tw / 2 + 1, h - th - roofH - 18);
+        ctx.lineTo(x + tw / 2 + 14, h - th - roofH - 12);
+        ctx.lineTo(x + tw / 2 + 1, h - th - roofH - 6);
+        ctx.closePath();
+        ctx.fill();
       }
     };
 
-    tower(20, 54, 130);
-    tower(140, 66, 168);
-    tower(264, 54, 130);
+    // keep (center tall)
+    tower(150, 72, 185, 34);
+    // side towers
+    tower(28, 58, 138, 26);
+    tower(290, 58, 142, 26);
+    // smaller corner turrets
+    tower(100, 36, 105, 18);
+    tower(240, 36, 110, 18);
 
-    // curtain wall
-    ctx.fillRect(60, h - 84, 214, 60);
-    for (let b = 60; b < 274; b += 16) {
-      ctx.fillRect(b, h - 94, 9, 10);
+    // curtain walls
+    ctx.fillStyle = base;
+    ctx.fillRect(70, h - 92, 240, 68);
+    ctx.fillStyle = accent;
+    for (let b = 70; b < 310; b += 15) {
+      ctx.fillRect(b, h - 102, 9, 11);
     }
 
-    // lit windows: [x, y]
-    ctx.fillStyle = 'rgba(240,180,90,0.85)';
-    [
-      [36, h - 108], [166, h - 132],
-      [176, h - 100], [290, h - 104],
-    ].forEach(([x, y]) => ctx.fillRect(x, y, 8, 11));
+    // gatehouse
+    ctx.fillStyle = mid;
+    ctx.fillRect(168, h - 78, 40, 50);
+    ctx.fillStyle = '#0a1018';
+    ctx.beginPath();
+    ctx.moveTo(172, h - 28);
+    ctx.quadraticCurveTo(188, h - 58, 204, h - 28);
+    ctx.lineTo(204, h - 28);
+    ctx.closePath();
+    ctx.fill();
+
+    // glowing windows
+    const windows = [
+      [42, h - 112], [48, h - 95],
+      [168, h - 155], [178, h - 155], [188, h - 130], [168, h - 110],
+      [308, h - 116], [314, h - 98],
+      [110, h - 88], [250, h - 90],
+    ];
+    windows.forEach(([x, y], i) => {
+      const a = 0.7 + (i % 3) * 0.1;
+      ctx.fillStyle = `rgba(255, 200, 100, ${a})`;
+      ctx.fillRect(x, y, 7, 10);
+      // soft glow
+      ctx.fillStyle = `rgba(255, 180, 80, 0.15)`;
+      ctx.fillRect(x - 2, y - 1, 11, 12);
+    });
   });
 
   // ── Bird animation frames ─────────────────────────────────────────────
