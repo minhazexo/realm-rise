@@ -32,6 +32,12 @@ import { getItem } from '../data/items.js';
 import { iconFrame } from '../assets/icons.js';
 import { makePlayerSheet } from '../assets/index.js';
 import WaterSystem from '../systems/WaterSystem.js';
+import PostFXSystem from '../systems/PostFXSystem.js';
+import {
+  applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
+} from '../world/chunkPainter.js';
+import { refreshDynamicLights } from '../systems/DynamicLights.js';
+import { updateAmbientParticles, destroyAmbientParticles } from '../systems/AmbientParticles.js';
 
 export const AUTOSAVE_INTERVAL_MS = 100000;
 let uidSeq = 1;
@@ -82,6 +88,19 @@ export default class WorldScene extends Phaser.Scene {
     // Animated water overlay
     this.waterSystem = new WaterSystem(this);
     this.waterSystem.create();
+
+    // Post-processing pipeline (bloom, vignette, color grade, chromatic
+    // aberration). Honours settings.graphicsQuality — "low" disables
+    // everything except the always-on vignette.
+    this.postFX = new PostFXSystem(this);
+    this.postFX.create();
+
+    // Sync the atmosphere module with current game state.
+    setFogEnabled(GameState.s?.settings?.distanceFog !== false);
+    setAtmosphereState({
+      timeOfDay: GameState.s?.world?.timeOfDay || 0.5,
+      weather: GameState.s?.world?.activeWeather || 'clear'
+    });
     // Switch from menu lullaby to world ambience — soothing explore/day music.
     import('../systems/AudioSystem.js').then((a) => {
       try {
@@ -160,14 +179,33 @@ export default class WorldScene extends Phaser.Scene {
     this.env.update(dt);
     if (!S.session_dead) this.player.update(dt, this.envContextInput());
 
+    // Sync atmospheric state so the chunk fog tint tracks time/weather.
+    setAtmosphereState({
+      timeOfDay: S.world.timeOfDay,
+      weather: S.world.activeWeather
+    });
+    setFogEnabled(S.settings?.distanceFog !== false);
+
     this.updateChunks();
     const px = this.player.sprite.x, py = this.player.sprite.y;
+
+    // Refresh dynamic point lights (campfires, torches) — slow cadence.
+    if (this._frame % 30 === 0) refreshDynamicLights(this);
 
     // Update animated water overlay
     if (this.waterSystem) {
       const cam = this.cameras.main;
       this.waterSystem.update(dt, cam.scrollX + cam.width / 2, cam.scrollY + cam.height / 2,
         GameState.session.timePhase === 'night', this.env?.weather || 'clear');
+    }
+
+    // Ambient particles (pollen, mist, birds) — cheap, throttled by quality.
+    updateAmbientParticles(this, time, dt);
+
+    // Broadcast player world position so follow-the-player lights (torch)
+    // can track without polling.
+    if (this._frame % 2 === 0) {
+      Bus.emit('player-pos', { x: px, y: py });
     }
 
     for (const e of this.enemies) {
@@ -224,12 +262,20 @@ export default class WorldScene extends Phaser.Scene {
     this.lastPcy = pcy;
     const r = WORLD_CONFIG.activeChunkRadius;
     const wanted = new Set();
+    const px = this.player.sprite.x;
+    const py = this.player.sprite.y;
     for (let cy = pcy - r; cy <= pcy + r; cy++) {
       for (let cx = pcx - r; cx <= pcx + r; cx++) {
         const key = `${cx},${cy}`;
         wanted.add(key);
         if (!this.activeChunks.has(key)) {
           const canvas = getChunkCanvas(cx, cy);
+          // Apply atmospheric perspective (distance fog) right after paint.
+          // Baked into the canvas; invalidated by chunkPainter.setAtmosphereState
+          // when time-of-day or weather buckets change.
+          const cxCenter = cx * cs + cs / 2;
+          const cyCenter = cy * cs + cs / 2;
+          applyFogToChunk(canvas, cxCenter - px, cyCenter - py);
           const texKey = `chunk_${cx}_${cy}`;
           if (!this.textures.exists(texKey)) {
             const tex = this.textures.createCanvas(texKey, cs, cs);
@@ -237,7 +283,7 @@ export default class WorldScene extends Phaser.Scene {
             tctx.drawImage(canvas, 0, 0);
             tex.refresh();
           }
-          const img = this.add.image(cx * cs + cs / 2, cy * cs + cs / 2, texKey)
+          const img = this.add.image(cxCenter, cyCenter, texKey)
             .setOrigin(0.5)
             .setDepth(0);
           img.setDisplaySize(cs, cs);
@@ -1218,6 +1264,17 @@ class Floater {
       fontFamily: 'Spectral', fontSize: `${Math.round(15 * scale)}px`, color,
       stroke: '#241d17', strokeThickness: 3
     }).setOrigin(0.5).setDepth(900);
+    // Apply FX per quality tier so critical / rare / heal pop visually.
+    try {
+      const quality = GameState.s?.settings?.graphicsQuality || 'med';
+      if (quality !== 'low') {
+        // Per-text bloom: a subtle outer glow makes damage numbers & loot
+        // feel punchy. The strength scales with quality so 'low' stays cheap.
+        const strength = quality === 'ultra' ? 1.6 : quality === 'high' ? 1.0 : 0.55;
+        t.setBlendMode(Phaser.BlendModes.ADD);
+        if (t.postFX) t.postFX.addBloom(parseInt(color.slice(1), 16) || 0xffe9a8, strength, 6, 0.4);
+      }
+    } catch { /* FX not available — fine */ }
     this.scene.tweens.add({
       targets: t, y: y - 34, alpha: 0, duration: 900,
       onComplete: () => t.destroy()

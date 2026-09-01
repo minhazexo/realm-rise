@@ -42,6 +42,13 @@ const DEEP_WATER = 0.055;
 /** Shore edge for sandy fringe detection. */
 const SHORE_EDGE = 0.02;
 
+// ── Atmospheric fog ─────────────────────────────────────────────────────────
+// World-space distance (in chunks) at which the chunk starts fading into
+// the biome's "fog colour". This gives a sense of depth — distant terrain
+// melts into the horizon haze instead of tiling forever.
+const FOG_START_CHUNKS = 5;
+const FOG_END_CHUNKS   = 9;
+
 // ── LRU cache ───────────────────────────────────────────────────────────────
 
 /** @type {Map<string, HTMLCanvasElement>} Cache key = "cx,cy". */
@@ -330,6 +337,121 @@ export function getChunkCanvas(cx, cy) {
   }
   return c;
 }
+
+/**
+ * Atmospheric perspective: lerp the chunk canvas toward a biome-tinted
+ * haze colour based on distance from the camera. Closer chunks are
+ * unmodified; distant chunks fade smoothly into the horizon colour so the
+ * world has real depth instead of tiling to infinity.
+ *
+ * Called from WorldScene after each chunk is drawn onto the layer.
+ * Cheap: a single multiplicative compositing pass per active chunk per
+ * resize event (not per frame).
+ *
+ * @param {HTMLCanvasElement} canvas  Chunk canvas produced by getChunkCanvas().
+ * @param {number} dx  World-space distance from camera centre to chunk centre (px).
+ * @param {number} dy  Unused — keep for symmetry with future 2D-distance fog.
+ */
+export function applyFogToChunk(canvas, dx, dy) {
+  if (!canvas) return;
+  const size = canvas.width;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  // Skip fog overlay if the user disabled it or performance is critical.
+  if (!shouldApplyFog()) return;
+  const distChunks = Math.abs(dx) / size;
+  const t = Math.max(0, Math.min(1,
+    (distChunks - FOG_START_CHUNKS) / (FOG_END_CHUNKS - FOG_START_CHUNKS)
+  ));
+  if (t <= 0) return;
+  const fogColor = getFogColor();
+  // Multiply-blend the fog over the chunk. This preserves the chunk's
+  // texture detail while tinting toward the horizon colour.
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = t * 0.45; // up to 45% fog tint at the far edge
+  ctx.fillStyle = fogColor;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+// Module-level toggle (the settings system drives this).
+let _fogEnabled = true;
+export function setFogEnabled(on) { _fogEnabled = on; }
+function shouldApplyFog() { return _fogEnabled; }
+
+// Track whether the fog params changed enough to invalidate the cache.
+// We re-bake fog only when timeOfDay or weather crosses a threshold.
+let _fogSnapshot = '';
+let _fogDirty = true;
+export function isFogDirty() { return _fogDirty; }
+export function clearFogDirty() { _fogDirty = false; }
+
+// Time-of-day + weather tint for the horizon haze. Updated each frame
+// from WorldScene via setAtmosphereState().
+let _fogBaseColor = '#a9b8c8';
+let _fogTimeOfDay = 0.5;
+let _fogWeather = 'clear';
+let _fogBiomeTints = {
+  plains:   '#8aa872',
+  forest:   '#6c8862',
+  swamp:    '#586e54',
+  mountains:'#8e929b',
+  desert:   '#c2a575',
+  frozen:   '#c4d0db',
+  volcanic: '#7e5a4a'
+};
+export function setAtmosphereState({ timeOfDay, weather }) {
+  if (typeof timeOfDay === 'number') _fogTimeOfDay = timeOfDay;
+  if (weather) _fogWeather = weather;
+  // Bucket time-of-day to 12 buckets per day — re-bake fog only at bucket change.
+  const bucket = Math.floor(_fogTimeOfDay * 12) + ':' + _fogWeather;
+  if (bucket !== _fogSnapshot) {
+    _fogSnapshot = bucket;
+    _fogDirty = true;
+    cache.clear();   // invalidate so distant chunks re-bake with new fog
+  }
+}
+export function setFogBiomeTint(biomeId, color) {
+  if (biomeId && color) _fogBiomeTints[biomeId] = color;
+}
+
+/**
+ * Compute the current fog colour based on time-of-day + weather + the
+ * last-set biome tint. Called per-frame in WorldScene so the horizon
+ * matches the sky.
+ */
+export function getFogColor() {
+  const t = _fogTimeOfDay;
+  const isNight = t > 0.78 || t < 0.24;
+  const biomeBase = _fogBiomeTints[_lastFogBiome] || '#a9b8c8';
+  const r0 = parseInt(biomeBase.slice(1, 3), 16);
+  const g0 = parseInt(biomeBase.slice(3, 5), 16);
+  const b0 = parseInt(biomeBase.slice(5, 7), 16);
+  let r = r0, g = g0, b = b0;
+  if (isNight) {
+    r = Math.round(r0 * 0.4 + 18);
+    g = Math.round(g0 * 0.4 + 22);
+    b = Math.round(b0 * 0.6 + 60);
+  } else if (t > 0.22 && t < 0.32) {
+    r = Math.round(r0 * 0.7 + 200);
+    g = Math.round(g0 * 0.7 + 130);
+    b = Math.round(b0 * 0.7 + 90);
+  } else if (t > 0.74 && t < 0.82) {
+    r = Math.round(r0 * 0.7 + 200);
+    g = Math.round(g0 * 0.7 + 100);
+    b = Math.round(b0 * 0.7 + 60);
+  }
+  if (_fogWeather === 'storm') { r = Math.round(r * 0.6); g = Math.round(g * 0.65); b = Math.round(b * 0.75); }
+  if (_fogWeather === 'fog' || _fogWeather === 'drizzle') {
+    r = Math.round(r * 0.85 + 140);
+    g = Math.round(g * 0.85 + 140);
+    b = Math.round(b * 0.85 + 150);
+  }
+  return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+let _lastFogBiome = 'plains';
+export function setLastFogBiome(id) { if (id) _lastFogBiome = id; }
 
 // ── Cache management ────────────────────────────────────────────────────────
 

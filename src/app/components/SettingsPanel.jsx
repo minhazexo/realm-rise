@@ -81,6 +81,14 @@ export default function SettingsPanel({ onBack }) {
 
       {/* ── Video / Quality ────────────────────────────────────────────── */}
       <Section title="Video & Quality" hint="Lower these on slower hardware or for a calmer look.">
+        <Row label="Graphics quality" hint="Master preset. Controls bloom, fog, aberration, and particle density.">
+          <PillSelect
+            value={s.graphicsQuality || 'med'}
+            options={SETTINGS_LIMITS.graphicsQuality.allowed}
+            onChange={(v) => onScalar('graphicsQuality', v)}
+            labels={{ low: 'Low', med: 'Med', high: 'High', ultra: 'Ultra' }}
+          />
+        </Row>
         <Row label="Particles" hint="Reduces on-screen sparks, smoke, fireflies.">
           <PillSelect
             value={s.particles}
@@ -89,6 +97,7 @@ export default function SettingsPanel({ onBack }) {
           />
         </Row>
         <Toggle label="Shadows" hint="Ground shadow ellipses under entities." checked={s.shadows !== false} onChange={(v) => onScalar('shadows', v)} />
+        <Toggle label="Distance fog" hint="Faraway terrain fades into the horizon. Disable on slow hardware." checked={s.distanceFog !== false} onChange={(v) => onScalar('distanceFog', v)} />
         <Row label="UI scale" hint="Zoom the entire game UI.">
           <Slider
             value={s.uiScale}

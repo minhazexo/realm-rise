@@ -18,6 +18,7 @@ import {
   clearMenuCache,
   isImmortal
 } from '../src/game/systems/SettingsSystem.js';
+import { SETTINGS_VERSION } from '../src/game/systems/SettingsSystem.js';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } else console.log('✓ ' + m); };
@@ -193,6 +194,70 @@ updateSettings({ immortal: false });
 ok(isImmortal() === false, 'isImmortal returns false when off');
 resetSettings();
 ok(isImmortal() === false, 'reset clears immortal');
+
+console.log('— Graphics quality & fog —');
+ok(SETTINGS_DEFAULTS.graphicsQuality === 'med', 'graphicsQuality defaults to med');
+ok(SETTINGS_DEFAULTS.distanceFog === true, 'distanceFog defaults to true');
+ok(SETTINGS_LIMITS.graphicsQuality.allowed.length === 4, 'graphicsQuality has 4 allowed values');
+ok(SETTINGS_LIMITS.graphicsQuality.allowed.includes('ultra'), 'graphicsQuality allows ultra');
+updateSettings({ graphicsQuality: 'ultra' });
+ok(GameState.s.settings.graphicsQuality === 'ultra', 'graphicsQuality persists');
+updateSettings({ distanceFog: false });
+ok(GameState.s.settings.distanceFog === false, 'distanceFog persists');
+// Round-trip both new keys through normalise
+const norm = normaliseSettings({ graphicsQuality: 'high', distanceFog: true });
+ok(norm.graphicsQuality === 'high', 'normaliseSettings keeps graphicsQuality');
+ok(norm.distanceFog === true, 'normaliseSettings keeps distanceFog');
+// Regression check for these new keys
+for (const k of ['graphicsQuality', 'distanceFog']) {
+  const flipped = { ...SETTINGS_DEFAULTS, [k]: 'flip-test' };
+  const out = normaliseSettings(flipped);
+  ok(out[k] !== undefined, `normaliseSettings keeps key '${k}'`);
+}
+// Verify SETTINGS_VERSION exists (used for migration of prefs JSON)
+ok(typeof SETTINGS_VERSION === 'number', 'SETTINGS_VERSION is a number');
+
+console.log('— ChunkPainter fog helpers —');
+const cp = await import('../src/game/world/chunkPainter.js');
+ok(typeof cp.applyFogToChunk === 'function', 'applyFogToChunk exported');
+ok(typeof cp.setAtmosphereState === 'function', 'setAtmosphereState exported');
+ok(typeof cp.getFogColor === 'function', 'getFogColor exported');
+ok(typeof cp.setFogEnabled === 'function', 'setFogEnabled exported');
+cp.setFogEnabled(false); // toggle works without throwing
+cp.setFogEnabled(true);
+cp.setAtmosphereState({ timeOfDay: 0.5, weather: 'clear' });
+const col = cp.getFogColor();
+ok(typeof col === 'string' && col.startsWith('#'), `getFogColor returns hex (${col})`);
+cp.setAtmosphereState({ timeOfDay: 0.27, weather: 'clear' }); // dawn
+const dawn = cp.getFogColor();
+ok(dawn !== col, 'getFogColor shifts between dawn and mid-day');
+cp.setAtmosphereState({ timeOfDay: 0.05, weather: 'clear' }); // night
+const night = cp.getFogColor();
+ok(night !== col && night !== dawn, 'getFogColor returns different colour at night');
+cp.setAtmosphereState({ timeOfDay: 0.5, weather: 'storm' });
+const storm = cp.getFogColor();
+ok(storm !== col, 'getFogColor shifts for storm weather');
+
+console.log('— PostFXSystem helpers —');
+const pfx = await import('../src/game/systems/PostFXSystem.js');
+ok(typeof pfx.default === 'function', 'PostFXSystem default export is a class');
+ok(typeof pfx.graphicsQualityNum === 'function', 'graphicsQualityNum exported');
+ok(typeof pfx.graphicsQualityAtLeast === 'function', 'graphicsQualityAtLeast exported');
+ok(typeof pfx.graphicsQualityOrder === 'function', 'graphicsQualityOrder exported');
+ok(pfx.graphicsQualityOrder().length === 4, 'graphicsQualityOrder has 4 entries');
+// qualityNum returns 0/1/2/3 depending on current setting
+updateSettings({ graphicsQuality: 'low' });
+ok(pfx.graphicsQualityNum() === 0, 'low → qualityNum 0');
+updateSettings({ graphicsQuality: 'ultra' });
+ok(pfx.graphicsQualityNum() === 3, 'ultra → qualityNum 3');
+updateSettings({ graphicsQuality: 'med' });
+ok(pfx.graphicsQualityNum() === 1, 'med → qualityNum 1');
+// graphicsQualityAtLeast respects the preset
+ok(pfx.graphicsQualityAtLeast('low') === true, 'med ≥ low');
+ok(pfx.graphicsQualityAtLeast('high') === false, 'med < high');
+
+resetSettings();
+ok(GameState.s.settings.graphicsQuality === 'med', 'reset restores graphicsQuality');
 
 console.log(fails === 0 ? '✅ SETTINGS PASS — settings layer consistent.' : `❌ ${fails} settings failure(s)`);
 process.exit(fails ? 1 : 0);

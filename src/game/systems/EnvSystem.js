@@ -8,6 +8,7 @@ import { DAYNIGHT_CONFIG, WEATHER_CONFIG } from '../core/Constants.js';
 import { biomeAt } from '../world/worldGen.js';
 import { particleMultiplier, shadowsEnabled } from './SettingsSystem.js';
 import { throttleConfig } from './particleThrottle.js';
+import { setSkyColor, setSunPosition } from './WaterSystem.js';
 
 export const DAWN = 0.24;
 export const DUSK = 0.78;
@@ -268,6 +269,20 @@ export default class EnvSystem {
     if (this.skyGlow) {
       this.skyGlow.setTint(isNight ? 0x203868 : goldenHour > 0.2 ? 0xffb070 : 0xffe0a8);
       this.skyGlow.setAlpha(isNight ? 0.18 : 0.08 + smoothDay * 0.06 + goldenHour * 0.08);
+    }
+
+    // Push the sky tint + sun position to the water system so water
+    // picks up reflections matching the time of day.
+    const skyHex = isNight ? 0x203868 : goldenHour > 0.2 ? 0xffb070 : 0xffe0a8;
+    const skyR = (skyHex >> 16) & 255, skyG = (skyHex >> 8) & 255, skyB = skyHex & 255;
+    setSkyColor(skyR, skyG, skyB);
+    if (this.sunSprite) {
+      const w = this.scene.scale.width;
+      // The sun sprite is screen-fixed (scrollFactor=0). Convert to world
+      // coords by adding camera scroll so the water shader can position
+      // glints relative to the camera.
+      const cam = this.scene.cameras.main;
+      setSunPosition(cam.scrollX + this.sunSprite.x, cam.scrollY + this.sunSprite.y);
     }
 
     // Night fireflies

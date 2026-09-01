@@ -28,7 +28,9 @@ export const SAVE_SETTINGS_KEYS = [
   'shadows',
   'autosave',
   'autosaveSec',
-  'movementScheme'
+  'movementScheme',
+  'graphicsQuality',
+  'distanceFog'
 ];
 
 // Keys that also live in `rotr_prefs_v1` so they survive browser restarts
@@ -55,6 +57,11 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   autosave: true,
   autosaveSec: AUTOSAVE_INTERVAL_SEC,  // 100s default
   movementScheme: 'wasd', // 'wasd' | 'arrows'
+  /** Master graphics preset — drives PostFXSystem + fog + particles.
+   *  'low' | 'med' | 'high' | 'ultra'. */
+  graphicsQuality: 'med',
+  /** Distance fog (atmospheric perspective) on chunk terrain. */
+  distanceFog: true,
   /** TEST ONLY — when true, the player cannot die. Survival drains are paused
    *  and incoming damage is treated as 1 hp-tick of scratch damage. Never save
    *  this as true in a shipped release. */
@@ -68,7 +75,8 @@ export const SETTINGS_LIMITS = Object.freeze({
   autosaveSec: { min: 30, max: 600, step: 10 },
   particles: { allowed: ['off', 'low', 'med', 'high'] },
   movementScheme: { allowed: ['wasd', 'arrows'] },
-  difficulty: { allowed: ['story', 'normal', 'hard', 'legendary'] }
+  difficulty: { allowed: ['story', 'normal', 'hard', 'legendary'] },
+  graphicsQuality: { allowed: ['low', 'med', 'high', 'ultra'] }
 });
 
 /* ── Validation ─────────────────────────────────────────────────────────── */
@@ -78,7 +86,8 @@ export const SETTINGS_LIMITS = Object.freeze({
  *  field. If you add a new boolean/string/number setting, add it here too. */
 const SCALAR_KEYS = [
   'difficulty', 'uiScale', 'textSize', 'particles', 'shadows',
-  'autosave', 'autosaveSec', 'movementScheme', 'immortal'
+  'autosave', 'autosaveSec', 'movementScheme', 'graphicsQuality',
+  'distanceFog', 'immortal'
 ];
 
 /**

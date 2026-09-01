@@ -29,6 +29,13 @@ const CLEAR_WATER  = 'rgba(120,190,230,';
 const MURKY_WATER  = 'rgba(90,130,80,';
 const FOAM_COLOR   = 'rgba(255,255,255,';
 const SPARKLE_COLOR = 'rgba(255,255,255,';
+// Sky-tinted water reflection (overlaid with low alpha) so the water
+// picks up the colour of the sky/sun above. Set by EnvSystem via setSkyColor.
+let _skyColor = { r: 160, g: 200, b: 240 };
+export function setSkyColor(r, g, b) { _skyColor = { r, g, b }; }
+// Sun position (world-space). Used to compute sun glint sparkle clusters.
+let _sunPos = null;
+export function setSunPosition(x, y) { _sunPos = { x, y }; }
 
 // ── WaterSystem class ───────────────────────────────────────────────────────
 
@@ -100,6 +107,14 @@ export default class WaterSystem {
     const wavePhaseY = t * 0.8;
     const isMurky = false; // could be based on biome
 
+    // ── 0. Sky-tinted base wash (cheap "reflection" of the sky above) ──
+    // Renders a translucent sky-coloured wash over all water pixels.
+    // Strength follows time-of-day: stronger at night (water reflects stars),
+    // softer by day.
+    const skyAlpha = isNight ? 0.18 : 0.10;
+    ctx.fillStyle = `rgba(${_skyColor.r},${_skyColor.g},${_skyColor.b},${skyAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+
     // ── 1. Animated wave lines ────────────────────────────────────────
     ctx.lineWidth = 1.2;
     ctx.lineCap = 'round';
@@ -131,6 +146,43 @@ export default class WaterSystem {
         }
       }
       if (drawing) ctx.stroke();
+    }
+
+    // ── 1b. Sun glint: bright cluster of sparkles near the sun reflection
+    // point on water. Only visible during the day. Creates the iconic
+    // "shimmering path of light" effect.
+    if (!isNight && _sunPos) {
+      const dx = _sunPos.x - camX;
+      const dy = _sunPos.y - camY;
+      const dist = Math.hypot(dx, dy);
+      // Reflection band runs roughly perpendicular to the sun direction.
+      // We just scatter sparkles in a tight ring within 220px of the
+      // sun's screen position.
+      const ringR = Math.min(180, dist * 0.25);
+      const glintCount = 12;
+      for (let i = 0; i < glintCount; i++) {
+        const a = (i / glintCount) * Math.PI * 2 + t * 0.4;
+        const r = ringR * (0.6 + Math.sin(i * 1.7 + t * 2.1) * 0.4);
+        const sx = w / 2 + dx + Math.cos(a) * r;
+        const sy = h / 2 + dy + Math.sin(a) * r * 0.45; // squashed vertically
+        if (sx < 0 || sx > w || sy < 0 || sy > h) continue;
+        // Only draw on water (cheap: sample elevation at the world point)
+        const wx = camX + sx - w / 2;
+        const wy = camY + sy - h / 2;
+        if (elevationAt(wx, wy) >= RIVER_LEVEL - 0.02) continue;
+        const twinkle = 0.4 + 0.6 * Math.sin(t * 4 + i * 1.3);
+        const sz = 1.4 + Math.sin(t * 2 + i) * 1.0;
+        ctx.globalAlpha = 0.32 * twinkle;
+        ctx.fillStyle = SPARKLE_COLOR;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - sz);
+        ctx.lineTo(sx + sz * 0.6, sy);
+        ctx.lineTo(sx, sy + sz);
+        ctx.lineTo(sx - sz * 0.6, sy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
 
     // ── 2. Shore foam ────────────────────────────────────────────────

@@ -34,7 +34,22 @@ export function createGame(containerId = 'game-container') {
       height: '100%',
       autoCenter: Phaser.Scale.CENTER_BOTH
     },
-    render: { antialias: true, pixelArt: false, roundPixels: false },
+    render: {
+      antialias: true,
+      pixelArt: false,
+      roundPixels: false,
+      // Sub-pixel rendering on the GPU for sharper, smoother visuals.
+      subPixel: true,
+      // PowerPreference: prefer high-performance GPU for shader effects.
+      powerPreference: 'high-performance',
+      // Enable the WebGL pipeline's mipmap generation for textures so
+      // distant chunks sample the right LOD.
+      mipmap: true
+    },
+    // Phaser 4 ships the FX pipelines automatically when the camera calls
+    // postFX.addXxx(). We also enable the global Light2D pipeline flag
+    // so future Phaser versions light dynamically-lit entities for free.
+    pipeline: { LightsActive: true },
     scene: [MenuScene, WorldScene]
   });
 
