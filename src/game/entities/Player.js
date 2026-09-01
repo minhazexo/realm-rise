@@ -1,10 +1,11 @@
 // Player entity (spec §5–7, §18): movement feel, combat actions, survival.
 import Phaser from 'phaser';
 import GameState from '../core/GameState.js';
-import { Bus } from '../core/EventBus.js';
+import { Bus, CH } from '../core/EventBus.js';
 import { PLAYER_CONFIG, DIFFICULTY } from '../core/Constants.js';
 import { getItem } from '../data/items.js';
 import { wearEquipped, countItem, removeItem } from '../systems/InventorySystem.js';
+import { shakeAllowed, shadowsEnabled } from '../systems/SettingsSystem.js';
 
 export default class Player {
   constructor(scene, x, y) {
@@ -25,7 +26,12 @@ export default class Player {
       .setDepth(49)
       .setScale(1.1)
       .setAlpha(0.55)
-      .setBlendMode(Phaser.BlendModes.MULTIPLY);
+      .setBlendMode(Phaser.BlendModes.MULTIPLY)
+      .setVisible(shadowsEnabled());
+    // React to a shadows toggle without needing a player re-create.
+    Bus.on(CH.SETTINGS, () => {
+      if (this.shadow) this.shadow.setVisible(shadowsEnabled());
+    });
     this.slashFx = scene.add.image(x, y, 'fx_slash2').setDepth(80).setVisible(false).setBlendMode('ADD');
     this.dodgeGhost = scene.add.image(x, y, 'player_char', 'down_1').setAlpha(0).setDepth(49);
     this.cool = { attack: 0, dodge: 0 };
@@ -211,9 +217,12 @@ export default class Player {
       // Brief freeze frames give attacks weight and impact.
       const hitstopDuration = opts.heavy ? 0.065 : 0.035;
       this.hitstopTimer = hitstopDuration;
-      // Camera shake scaled by damage dealt — crits shake harder
-      const shakeIntensity = opts.heavy ? 0.008 : 0.004;
-      this.scene.cameras.main.shake(80, shakeIntensity);
+      // Camera shake scaled by damage dealt — crits shake harder. Respects
+      // both screenShake and reducedMotion user preferences.
+      if (shakeAllowed()) {
+        const shakeIntensity = opts.heavy ? 0.008 : 0.004;
+        this.scene.cameras.main.shake(80, shakeIntensity);
+      }
       // Kill streak: restore a tiny bit of stamina on hit to reward aggression
       S.player.stamina = Math.min(D.maxStamina, S.player.stamina + (opts.heavy ? 3 : 1.5));
     }
@@ -241,7 +250,7 @@ export default class Player {
       const a = Math.atan2(this.sprite.y - srcY, this.sprite.x - srcX);
       this.sprite.body.velocity.set(Math.cos(a) * 210, Math.sin(a) * 210);
     }
-    if (S.settings.toggles.screenShake !== false) this.scene.cameras.main.shake(140, 0.005);
+    if (shakeAllowed()) this.scene.cameras.main.shake(140, 0.005);
     GameState.notify('PLAYER');
     if (S.player.hp <= 0) this.die();
     return dmg;

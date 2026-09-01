@@ -9,6 +9,7 @@ import { initAudio, installAudioBus, playSfx, applyVolumes } from './systems/Aud
 import { installBridge } from './core/BridgeSystem.js';
 import { recompute } from './systems/ProgressionSystem.js';
 import { refresh as kingdomRefresh } from './systems/KingdomSystem.js';
+import { installSettingsSystem, applySettings, withPrefs, clearMenuCache } from './systems/SettingsSystem.js';
 
 export let game = null;
 export let currentSceneKey = 'MenuScene';
@@ -42,6 +43,12 @@ export function createGame(containerId = 'game-container') {
     installAudioBus();
   }
   applyVolumes();
+  // Settings system listens for CH.SETTINGS and re-applies DOM/audio every
+  // time the panel mutates state.settings. Apply once at boot so the menu
+  // already respects browser-level prefs (uiScale, textSize, volumes,
+  // reducedMotion) even before a save is loaded.
+  installSettingsSystem();
+  applySettings(withPrefs(GameState.s?.settings), { busNotify: false });
   installBridge();
   Bus.on('play-sound', (name) => playSfx(name));
 
@@ -79,6 +86,11 @@ export function setScreen(screen) {
 /** Start a brand-new game from character creation. */
 export function startNewGame(seed, charOpts, difficulty) {
   GameState.newGame(seed, charOpts, difficulty);
+  // The save's settings take over from the menu-time cache.
+  clearMenuCache();
+  // Apply settings (merge browser prefs over the freshly-created defaults) so
+  // that uiScale, textSize, audio etc. take effect immediately on world entry.
+  applySettings(withPrefs(GameState.s?.settings), { busNotify: false });
   recompute();
   setScreen('world');
 }
@@ -86,6 +98,11 @@ export function startNewGame(seed, charOpts, difficulty) {
 /** Load an existing save into the world. */
 export function loadGameIntoWorld(saveData) {
   if (saveData) GameState.load(saveData);
+  // The save's settings take over from the menu-time cache.
+  clearMenuCache();
+  // Re-apply prefs over the loaded save: prefs (browser-level) win unless the
+  // save explicitly set them.
+  applySettings(withPrefs(GameState.s?.settings), { busNotify: false });
   recompute();
   setScreen('world');
 }

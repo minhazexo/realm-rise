@@ -27,6 +27,7 @@ import { getBuildingDef } from '../data/buildings.js';
 import { getNpcDef } from '../data/npcs.js';
 import { getEnemyDef } from '../data/enemies.js';
 import { saveToSlot } from '../systems/SaveSystem.js';
+import { getSetting, movementKey, particleMultiplier, shadowsEnabled } from '../systems/SettingsSystem.js';
 import { getItem } from '../data/items.js';
 import { iconFrame } from '../assets/icons.js';
 import { makePlayerSheet } from '../assets/index.js';
@@ -108,9 +109,24 @@ export default class WorldScene extends Phaser.Scene {
     this.refreshPlayerSkin();
 
     this.time.addEvent({ delay: SETTLEMENT_CONFIG.productionTickSec * 1000, loop: true, callback: () => productionTick(this.player.pos) });
-    this.time.addEvent({ delay: AUTOSAVE_INTERVAL_MS, loop: true, callback: () => {
-      if (GameState.s?.settings?.autosave !== false) { saveToSlot('auto', GameState.s); GameState.toast({ title: 'Game saved', msg: 'Progress secured.', dur: 1800 }); }
-    } });
+    // Autosave interval honours the player's setting; default still 100s.
+    // We rebuild the timer if the user changes the value mid-session.
+    const buildAutosaveTimer = () => {
+      if (this._autosaveTimer) this._autosaveTimer.remove();
+      const sec = Math.max(5, getSetting('autosaveSec') || 100);
+      this._autosaveTimer = this.time.addEvent({
+        delay: sec * 1000,
+        loop: true,
+        callback: () => {
+          if (getSetting('autosave') !== false) {
+            saveToSlot('auto', GameState.s);
+            GameState.toast({ title: 'Game saved', msg: 'Progress secured.', dur: 1800 });
+          }
+        }
+      });
+    };
+    buildAutosaveTimer();
+    Bus.on('settings-applied', buildAutosaveTimer);
 
     GameState.notify(CH.WORLD);
     this.cameras.main.fadeIn(600);
@@ -953,6 +969,17 @@ export default class WorldScene extends Phaser.Scene {
       UP: Phaser.Input.Keyboard.KeyCodes.UP, DOWN: Phaser.Input.Keyboard.KeyCodes.DOWN,
       LEFT: Phaser.Input.Keyboard.KeyCodes.LEFT, RIGHT: Phaser.Input.Keyboard.KeyCodes.RIGHT,
       SHIFT: Phaser.Input.Keyboard.KeyCodes.SHIFT, SPACE: 'SPACE'
+    });
+    // movementScheme determines which keyset Player.js treats as "primary".
+    // Both sets always work; the primary set is what the HUD hint highlights.
+    this.primaryKeys = movementKey() === 'arrows'
+      ? ['UP', 'DOWN', 'LEFT', 'RIGHT']
+      : ['W', 'A', 'S', 'D'];
+    // Re-derive if the player changes movement scheme mid-session.
+    Bus.on('settings-applied', () => {
+      this.primaryKeys = movementKey() === 'arrows'
+        ? ['UP', 'DOWN', 'LEFT', 'RIGHT']
+        : ['W', 'A', 'S', 'D'];
     });
     this.input.keyboard.on('keydown-E', () => { if (!GameState.session.uiPanel) this.doGather(); });
     this.input.keyboard.on('keydown-I', () => this.togglePanel('inventory'));

@@ -6,6 +6,8 @@ import GameState from '../core/GameState.js';
 import { Bus } from '../core/EventBus.js';
 import { DAYNIGHT_CONFIG, WEATHER_CONFIG } from '../core/Constants.js';
 import { biomeAt } from '../world/worldGen.js';
+import { particleMultiplier, shadowsEnabled } from './SettingsSystem.js';
+import { throttleConfig } from './particleThrottle.js';
 
 export const DAWN = 0.24;
 export const DUSK = 0.78;
@@ -156,37 +158,45 @@ export default class EnvSystem {
     const w = this.scene.scale.width, h = this.scene.scale.height;
     if (this.weather === 'drizzle' || this.weather === 'storm') {
       const isStorm = this.weather === 'storm';
-      this.rainEmitter = this.scene.add.particles(0, 0, 'pt_rain', {
+      const cfg = throttleConfig({
         x: { min: 0, max: w }, y: -20, lifespan: 900,
         speedY: isStorm ? 520 : 340, speedX: isStorm ? 90 : 60,
         quantity: isStorm ? 5 : 2, frequency: isStorm ? 40 : 60,
         alpha: { start: isStorm ? 0.8 : 0.7, end: 0.1 }
-      }).setDepth(3900).setScrollFactor(0);
+      });
+      if (cfg) this.rainEmitter = this.scene.add.particles(0, 0, 'pt_rain', cfg)
+        .setDepth(3900).setScrollFactor(0);
     } else if (this.weather === 'snow') {
-      this.snowEmitter = this.scene.add.particles(0, 0, 'pt_snow', {
+      const cfg = throttleConfig({
         x: { min: 0, max: w }, y: -10, lifespan: 2800,
         speedY: 35, speedX: 25, gravityY: 5, quantity: 1, frequency: 90,
         alpha: { start: 0.9, end: 0.15 }, scale: { min: 0.3, max: 1.1 },
         rotate: { min: 0, max: 360 }
-      }).setDepth(3900).setScrollFactor(0);
+      });
+      if (cfg) this.snowEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
+        .setDepth(3900).setScrollFactor(0);
     } else if (this.weather === 'fog') {
       this.fogRect = this.scene.add.rectangle(0, 0, w, h, 0xdfe4ec, 0.34).setOrigin(0).setScrollFactor(0).setDepth(3900).setBlendMode('ADD');
       // Drifting fog wisps
-      this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', {
+      const cfg = throttleConfig({
         x: { min: 0, max: w }, y: { min: h * 0.3, max: h * 0.7 }, lifespan: 5000,
         speedX: 18, speedY: -3, quantity: 1, frequency: 400,
         alpha: { start: 0.15, end: 0 }, scale: { min: 2, max: 4 },
         tint: 0xdfe4ec
-      }).setDepth(3900).setScrollFactor(0);
+      });
+      if (cfg) this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
+        .setDepth(3900).setScrollFactor(0);
     } else if (this.weather === 'heat') {
       this.fogRect = this.scene.add.rectangle(0, 0, w, h, 0xffddaa, 0.2).setOrigin(0).setScrollFactor(0).setDepth(3900).setBlendMode('ADD');
       // Heat shimmer particles (rising wisps)
-      this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', {
+      const cfg = throttleConfig({
         x: { min: 0, max: w }, y: h + 10, lifespan: 3000,
         speedY: -25, speedX: 5, quantity: 1, frequency: 500,
         alpha: { start: 0.12, end: 0 }, scale: { min: 1.5, max: 3 },
         tint: 0xffddaa
-      }).setDepth(3900).setScrollFactor(0);
+      });
+      if (cfg) this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
+        .setDepth(3900).setScrollFactor(0);
     }
   }
 
@@ -263,7 +273,7 @@ export default class EnvSystem {
     // Night fireflies
     if (isNight && !this.fireflyEmitter && this.scene.textures.exists('pt_firefly')) {
       const sw = this.scene.scale.width, sh = this.scene.scale.height;
-      this.fireflyEmitter = this.scene.add.particles(0, 0, 'pt_firefly', {
+      const cfg = throttleConfig({
         x: { min: 0, max: sw },
         y: { min: sh * 0.35, max: sh * 0.9 },
         lifespan: { min: 2500, max: 5000 },
@@ -274,7 +284,9 @@ export default class EnvSystem {
         quantity: 1,
         frequency: 350,
         blendMode: 'ADD'
-      }).setDepth(3905).setScrollFactor(0);
+      });
+      if (cfg) this.fireflyEmitter = this.scene.add.particles(0, 0, 'pt_firefly', cfg)
+        .setDepth(3905).setScrollFactor(0);
     } else if (!isNight && this.fireflyEmitter) {
       this.fireflyEmitter.destroy();
       this.fireflyEmitter = null;
@@ -294,9 +306,12 @@ export default class EnvSystem {
     if (this.dangerVignette) {
       const hpPct = (S.player.hp || 0) / (S.player.derived?.maxHp || 1);
       if (hpPct < 0.3) {
-        // Pulse intensity: stronger the lower HP gets, with a breathing effect
+        // Pulse intensity: stronger the lower HP gets, with a breathing effect.
+        // Halve the breathing when the user prefers reduced motion so the
+        // vignette still warns but doesn't strobe.
         const danger = (0.3 - hpPct) / 0.3; // 0 at 30% HP, 1 at 0% HP
-        const pulse = 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
+        const reduced = S.settings?.toggles?.reducedMotion === true;
+        const pulse = reduced ? 0.65 : 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
         this.dangerVignette.setAlpha(danger * (0.45 + pulse * 0.25));
       } else {
         this.dangerVignette.setAlpha(0);

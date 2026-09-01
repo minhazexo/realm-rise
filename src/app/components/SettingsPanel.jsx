@@ -1,58 +1,270 @@
-// Settings screen (spec §59, §58): volumes, toggles, accessibility, difficulty.
-import React, { useState } from 'react';
+// Settings screen (spec §59): volumes, video, accessibility, gameplay,
+// controls. Single source of UI mutators → SettingsSystem.updateSettings()
+// which performs validation, persistence, DOM/audio/bus side-effects.
+import React from 'react';
 import GameState from '../../game/core/GameState.js';
 import { CH } from '../../game/core/EventBus.js';
 import { useGameState } from '../../hooks/useGameState.js';
+import {
+  updateSettings,
+  resetSettings,
+  SETTINGS_LIMITS,
+  SETTINGS_DEFAULTS,
+  lastApplied
+} from '../../game/systems/SettingsSystem.js';
+import { playSfx } from '../../game/systems/AudioSystem.js';
+
+const KEY_HINTS = [
+  { key: 'WASD / Arrows', desc: 'Move' },
+  { key: 'Shift', desc: 'Sprint' },
+  { key: 'Space', desc: 'Dodge' },
+  { key: 'LMB', desc: 'Attack (hold for heavy)' },
+  { key: 'RMB', desc: 'Block' },
+  { key: 'E', desc: 'Gather / interact' },
+  { key: 'I / C / B / M / J / K / P', desc: 'Inventory · Craft · Build · Map · Journal · Kingdom · Skills' },
+  { key: 'ESC', desc: 'Pause' }
+];
 
 export default function SettingsPanel({ onBack }) {
-  const s = useGameState([CH.SETTINGS], () => GameState.s?.settings);
-  if (!s) return null;
-  const set = (mut) => {
-    mut(s);
-    GameState.notify(CH.SETTINGS);
-    import('../../game/systems/AudioSystem.js').then((a) => a.applyVolumes());
-    import('../../game/core/EventBus.js').then(({ Bus }) => Bus.emit('refresh-ui'));
+  // Read the canonical "last applied" settings snapshot. This works whether
+  // we are at the main menu (no save loaded) or inside a run, because
+  // SettingsSystem keeps the snapshot up to date on every applySettings().
+  const live = useGameState(
+    [CH.SETTINGS, 'settings-applied', 'refresh-ui'],
+    () => lastApplied()
+  );
+  const s = live || SETTINGS_DEFAULTS;
+
+  const onV = (key, v) => updateSettings({ volumes: { [key]: v } });
+  const onT = (key, v) => updateSettings({ toggles: { [key]: v } });
+  const onScalar = (key, v) => updateSettings({ [key]: v });
+
+  const muteAll = s.toggles.musicOn === false && s.toggles.sfxOn === false;
+  const toggleMute = () => {
+    onT('musicOn', muteAll);
+    onT('sfxOn', muteAll);
   };
-  const setV = (k, v) => set((x) => { x.volumes[k] = v; });
-  const setT = (k, v) => set((x) => { x.toggles[k] = v; });
 
   return (
     <div className="panel settings-panel">
-      <h2>Settings</h2>
-      <div className="setting-group">
-        <h4>Audio</h4>
-        <label>Master <Slider v={s.volumes.master} onV={(v) => setV('master', v)} /></label>
-        <label>Music <Slider v={s.volumes.music} onV={(v) => setV('music', v)} /></label>
-        <label>SFX <Slider v={s.volumes.sfx} onV={(v) => setV('sfx', v)} /></label>
-        <label><input type="checkbox" checked={s.toggles.musicOn !== false} onChange={(e) => setT('musicOn', e.target.checked)} /> Music enabled</label>
-        <label><input type="checkbox" checked={s.toggles.sfxOn !== false} onChange={(e) => setT('sfxOn', e.target.checked)} /> SFX enabled</label>
+      <div className="settings-header">
+        <h2>Settings</h2>
+        <button
+          type="button"
+          className="btn btn-ghost btn-small settings-reset"
+          onClick={() => { resetSettings(); playSfx?.('ui_click'); }}
+        >
+          Reset to defaults
+        </button>
       </div>
-      <div className="setting-group">
-        <h4>Graphics & Feel</h4>
-        <label><input type="checkbox" checked={s.toggles.screenShake !== false} onChange={(e) => setT('screenShake', e.target.checked)} /> Screen shake</label>
-        <label><input type="checkbox" checked={s.toggles.reducedMotion !== true} onChange={(e) => setT('reducedMotion', e.target.checked)} /> Reduced motion</label>
-        <label>Particles
-          <select value={s.particles} onChange={(e) => set((x) => { x.particles = e.target.value; })}>
-            <option value="high">High</option><option value="med">Medium</option><option value="low">Low</option>
-          </select>
-        </label>
-        <label>UI Scale <Slider v={s.uiScale} min={0.8} max={1.4} onV={(v) => set((x) => { x.uiScale = v; })} /></label>
-      </div>
-      <div className="setting-group">
-        <h4>Gameplay</h4>
-        <label>Difficulty
-          <select value={s.difficulty} onChange={(e) => set((x) => { x.difficulty = e.target.value; })}>
-            <option value="story">Story</option><option value="normal">Normal</option>
-            <option value="hard">Hard</option><option value="legendary">Legendary</option>
-          </select>
-        </label>
-        <label><input type="checkbox" checked={s.autosave !== false} onChange={(e) => set((x) => { x.autosave = e.target.checked; })} /> Auto-save</label>
-      </div>
-      {onBack && <button className="btn btn-menu btn-small" onClick={onBack}>BACK</button>}
+
+      {/* ── Audio ──────────────────────────────────────────────────────── */}
+      <Section
+        title="Audio"
+        hint="Volumes blend in real time. They also save into the save file."
+      >
+        <Row label="Master" hint="Master volume for everything.">
+          <Slider value={s.volumes.master} min={0} max={1} onChange={(v) => onV('master', v)} />
+        </Row>
+        <Row label="Music" hint="Procedural ambience + per-biome music.">
+          <Slider value={s.volumes.music} min={0} max={1} onChange={(v) => onV('music', v)} />
+        </Row>
+        <Row label="SFX" hint="Combat, gathering, UI clicks, ambient layers.">
+          <Slider value={s.volumes.sfx} min={0} max={1} onChange={(v) => onV('sfx', v)} />
+        </Row>
+        <Toggle label="Music enabled" checked={s.toggles.musicOn !== false} onChange={(v) => onT('musicOn', v)} />
+        <Toggle label="SFX enabled" checked={s.toggles.sfxOn !== false} onChange={(v) => onT('sfxOn', v)} />
+        <button type="button" className="btn btn-small btn-ghost settings-mute" onClick={toggleMute}>
+          {muteAll ? 'Unmute all' : 'Mute all audio'}
+        </button>
+      </Section>
+
+      {/* ── Video / Quality ────────────────────────────────────────────── */}
+      <Section title="Video & Quality" hint="Lower these on slower hardware or for a calmer look.">
+        <Row label="Particles" hint="Reduces on-screen sparks, smoke, fireflies.">
+          <PillSelect
+            value={s.particles}
+            options={SETTINGS_LIMITS.particles.allowed}
+            onChange={(v) => onScalar('particles', v)}
+          />
+        </Row>
+        <Toggle label="Shadows" hint="Ground shadow ellipses under entities." checked={s.shadows !== false} onChange={(v) => onScalar('shadows', v)} />
+        <Row label="UI scale" hint="Zoom the entire game UI.">
+          <Slider
+            value={s.uiScale}
+            min={SETTINGS_LIMITS.uiScale.min}
+            max={SETTINGS_LIMITS.uiScale.max}
+            step={SETTINGS_LIMITS.uiScale.step}
+            onChange={(v) => onScalar('uiScale', v)}
+            format={(v) => `${Math.round(v * 100)}%`}
+          />
+        </Row>
+      </Section>
+
+      {/* ── Accessibility ──────────────────────────────────────────────── */}
+      <Section title="Accessibility" hint="Make the game easier on the eyes and brain.">
+        <Toggle label="Reduced motion" hint="Disables camera shake and slow pulses." checked={s.toggles.reducedMotion === true} onChange={(v) => onT('reducedMotion', v)} />
+        <Toggle label="Screen shake" hint="Hit / damage camera shake." checked={s.toggles.screenShake !== false} onChange={(v) => onT('screenShake', v)} />
+        <Toggle label="Damage numbers" hint="Float damage values when hitting enemies." checked={s.toggles.damageNumbers !== false} onChange={(v) => onT('damageNumbers', v)} />
+        <Toggle label="HP bars above enemies" hint="Always-on enemy HP bars instead of hover-only." checked={s.toggles.hpBarsAbove !== false} onChange={(v) => onT('hpBarsAbove', v)} />
+        <Toggle label="Colorblind-friendly HUD" hint="Uses higher-contrast shapes & icons for status." checked={s.toggles.colorblindHints === true} onChange={(v) => onT('colorblindHints', v)} />
+        <Row label="Text size" hint="Scales all in-game text and tooltips.">
+          <Slider
+            value={s.textSize}
+            min={SETTINGS_LIMITS.textSize.min}
+            max={SETTINGS_LIMITS.textSize.max}
+            step={SETTINGS_LIMITS.textSize.step}
+            onChange={(v) => onScalar('textSize', v)}
+            format={(v) => `${Math.round(v * 100)}%`}
+          />
+        </Row>
+      </Section>
+
+      {/* ── Gameplay ───────────────────────────────────────────────────── */}
+      <Section title="Gameplay" hint="Difficulty changes loot, damage, and survival drain mid-run.">
+        <Row label="Difficulty" hint="Affects enemy power, resource yields, and survival pressure.">
+          <PillSelect
+            value={s.difficulty}
+            options={SETTINGS_LIMITS.difficulty.allowed}
+            onChange={(v) => onScalar('difficulty', v)}
+            labels={{ story: 'Story', normal: 'Normal', hard: 'Hard', legendary: 'Legendary' }}
+          />
+        </Row>
+        <Toggle label="Auto-save" hint="Save your progress automatically every few minutes." checked={s.autosave !== false} onChange={(v) => onScalar('autosave', v)} />
+        {s.autosave !== false && (
+          <Row label="Auto-save every" hint="Time between automatic saves (seconds).">
+            <Slider
+              value={s.autosaveSec}
+              min={SETTINGS_LIMITS.autosaveSec.min}
+              max={SETTINGS_LIMITS.autosaveSec.max}
+              step={SETTINGS_LIMITS.autosaveSec.step}
+              onChange={(v) => onScalar('autosaveSec', v)}
+              format={(v) => `${v}s`}
+            />
+          </Row>
+        )}
+      </Section>
+
+      {/* ── Controls ───────────────────────────────────────────────────── */}
+      <Section title="Controls" hint="Choose your preferred primary key set. Both sets always work.">
+        <Row label="Movement keys" hint="Highlighted in the on-screen hints.">
+          <PillSelect
+            value={s.movementScheme}
+            options={SETTINGS_LIMITS.movementScheme.allowed}
+            onChange={(v) => onScalar('movementScheme', v)}
+            labels={{ wasd: 'WASD', arrows: 'Arrows' }}
+          />
+        </Row>
+        <div className="settings-keybinds">
+          <div className="settings-keybinds-title">
+            Key bindings <em>(read-only — remapping coming soon)</em>
+          </div>
+          <ul>
+            {KEY_HINTS.map((b) => (
+              <li key={b.key}>
+                <kbd>{b.key}</kbd>
+                <span>{b.desc}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      {onBack && (
+        <button className="btn btn-menu btn-small settings-back" onClick={onBack}>BACK</button>
+      )}
     </div>
   );
 }
 
-function Slider({ v, onV, min = 0, max = 1 }) {
-  return <input type="range" min={min} max={max} step={0.05} value={v} onChange={(e) => onV(parseFloat(e.target.value))} />;
+/* ── Atoms ─────────────────────────────────────────────────────────────── */
+
+function Section({ title, hint, children }) {
+  return (
+    <div className="setting-group">
+      <div className="setting-group-head">
+        <h4>{title}</h4>
+        {hint && <p className="setting-hint">{hint}</p>}
+      </div>
+      <div className="setting-group-body">{children}</div>
+    </div>
+  );
 }
+
+function Row({ label, hint, children }) {
+  return (
+    <div className="setting-row">
+      <div className="setting-row-text">
+        <span className="setting-label">{label}</span>
+        {hint && <em className="setting-row-hint">{hint}</em>}
+      </div>
+      <div className="setting-row-control">{children}</div>
+    </div>
+  );
+}
+
+function Toggle({ label, hint, checked, onChange }) {
+  return (
+    <label className="setting-toggle">
+      <span className="setting-toggle-text">
+        <span className="setting-label">{label}</span>
+        {hint && <em className="setting-row-hint">{hint}</em>}
+      </span>
+      <span className={`setting-toggle-switch ${checked ? 'on' : 'off'}`}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="setting-toggle-knob" />
+      </span>
+    </label>
+  );
+}
+
+/** Themed slider with live percentage badge. */
+function Slider({ value, onChange, min = 0, max = 1, step = 0.05, format }) {
+  const pct = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const fmt = format ? format(value) : value.toFixed(2);
+  return (
+    <div className="setting-slider">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        style={{ '--fill': `${pct * 100}%` }}
+      />
+      <span className="setting-slider-readout">{fmt}</span>
+    </div>
+  );
+}
+
+/** Compact pill-style segmented control for short option lists. */
+function PillSelect({ value, options, onChange, labels }) {
+  return (
+    <div className="setting-pills" role="radiogroup">
+      {options.map((o) => {
+        const label = (labels && labels[o]) || o;
+        const active = o === value;
+        return (
+          <button
+            type="button"
+            key={o}
+            role="radio"
+            aria-checked={active}
+            className={`setting-pill ${active ? 'active' : ''}`}
+            onClick={() => onChange(o)}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Touch SETTINGS_DEFAULTS so the import isn't unused (kept for future presets).
+void SETTINGS_DEFAULTS;

@@ -1,5 +1,6 @@
 // Default persistent-state factory. Everything that survives save/load starts here.
 import { VERSION, MAX_PLAYER_LEVEL, INVENTORY_BASE_SLOTS, DIFFICULTY, AUTOSAVE_INTERVAL_SEC } from './Constants.js';
+import { SETTINGS_DEFAULTS } from '../systems/SettingsSystem.js';
 
 export function createStateDefaults(seed) {
   return {
@@ -101,16 +102,13 @@ export function createStateDefaults(seed) {
     stats: { kills: 0, crafted: 0, nightsSurvived: 0 },
 
     settings: {
+      // Schema owned by SettingsSystem.SAVE_SETTINGS_KEYS. New toggles added
+      // there will appear here automatically.
+      ...SETTINGS_DEFAULTS,
+      // Difficulty still gets the legendary-friendly caps applied at boot.
       difficulty: 'normal',
-      volumes: { master: 0.8, music: 0.55, sfx: 0.85 },
-      toggles: { musicOn: true, sfxOn: true, screenShake: true, reducedMotion: false },
-      uiScale: 1,
-      textSize: 1,
-      particles: 'high',
-      shadows: true,
-      autosave: true,
-      autosaveSec: AUTOSAVE_INTERVAL_SEC,
-      movementScheme: 'wasd'
+      // AUTOSAVE_INTERVAL_SEC default is mirrored into SETTINGS_DEFAULTS.
+      autosaveSec: AUTOSAVE_INTERVAL_SEC
     }
   };
 }
