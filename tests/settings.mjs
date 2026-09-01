@@ -15,7 +15,8 @@ import {
   movementKey,
   withPrefs,
   currentSettings,
-  clearMenuCache
+  clearMenuCache,
+  isImmortal
 } from '../src/game/systems/SettingsSystem.js';
 
 let fails = 0;
@@ -134,6 +135,28 @@ ok(beforeMaster === SETTINGS_DEFAULTS.volumes.master, 'save settings unchanged b
 clearMenuCache();
 const afterClear = withPrefs(GameState.s.settings);
 ok(afterClear.volumes.master === SETTINGS_DEFAULTS.volumes.master, 'clearing cache falls back to save defaults');
+
+console.log('— Immortal (test-only) —');
+ok(SETTINGS_DEFAULTS.immortal === false, 'immortal defaults to false');
+updateSettings({ immortal: true });
+ok(isImmortal() === true, 'isImmortal reflects the toggle');
+ok(GameState.s.settings.immortal === true, 'immortal persists on the live settings');
+// Regression: every scalar key in SETTINGS_DEFAULTS must be round-trippable
+// via normaliseSettings. If a future setting is added to defaults but
+// forgotten in the normaliser, it silently stays false.
+const allKeys = Object.keys(SETTINGS_DEFAULTS);
+const roundTripped = normaliseSettings({ ...SETTINGS_DEFAULTS, immortal: true });
+ok(roundTripped.immortal === true, 'normaliseSettings round-trips immortal=true');
+for (const k of allKeys) {
+  if (typeof SETTINGS_DEFAULTS[k] === 'object' && SETTINGS_DEFAULTS[k] !== null) continue;
+  const flipped = { ...SETTINGS_DEFAULTS, [k]: 'flip-test' };
+  const out = normaliseSettings(flipped);
+  ok(out[k] !== undefined, `normaliseSettings keeps key '${k}'`);
+}
+updateSettings({ immortal: false });
+ok(isImmortal() === false, 'isImmortal returns false when off');
+resetSettings();
+ok(isImmortal() === false, 'reset clears immortal');
 
 console.log(fails === 0 ? '✅ SETTINGS PASS — settings layer consistent.' : `❌ ${fails} settings failure(s)`);
 process.exit(fails ? 1 : 0);

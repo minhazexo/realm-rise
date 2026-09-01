@@ -122,6 +122,19 @@ export default function SettingsPanel({ onBack }) {
 
       {/* ── Gameplay ───────────────────────────────────────────────────── */}
       <Section title="Gameplay" hint="Difficulty changes loot, damage, and survival drain mid-run.">
+        <div className="setting-test-flag">
+          <strong>⚠ Test only</strong>
+          <span>These options affect game balance and survival. Use for debugging or stress-testing systems.</span>
+        </div>
+        <Row label="Immortal (god mode)" hint="Player cannot die from combat or survival drains. Damage is clamped to 1 hp. Saves regardless.">
+          <OnOffButton
+            value={s.immortal === true}
+            onChange={(v) => onScalar('immortal', v)}
+            onLabel="ON"
+            offLabel="OFF"
+            danger
+          />
+        </Row>
         <Row label="Difficulty" hint="Affects enemy power, resource yields, and survival pressure.">
           <PillSelect
             value={s.difficulty}
@@ -219,6 +232,31 @@ function Toggle({ label, hint, checked, onChange }) {
         <span className="setting-toggle-knob" />
       </span>
     </label>
+  );
+}
+
+/**
+ * Real <button>-based ON/OFF switch. Unlike Toggle (which uses an invisible
+ * checkbox), this renders a real button element with role="switch" so right-
+ * click context menus behave normally and screen readers announce the state.
+ * Used for the Immortal god-mode flag where accidental right-clicks must not
+ * interfere with the toggle.
+ */
+function OnOffButton({ value, onChange, onLabel = 'ON', offLabel = 'OFF', danger }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      className={`setting-onoff ${value ? 'on' : 'off'} ${danger ? 'danger' : ''}`}
+      onClick={() => onChange(!value)}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <span className="setting-onoff-track">
+        <span className="setting-onoff-knob" />
+      </span>
+      <span className="setting-onoff-label">{value ? onLabel : offLabel}</span>
+    </button>
   );
 }
 

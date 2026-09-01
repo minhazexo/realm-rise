@@ -5,7 +5,7 @@ import { Bus, CH } from '../core/EventBus.js';
 import { PLAYER_CONFIG, DIFFICULTY } from '../core/Constants.js';
 import { getItem } from '../data/items.js';
 import { wearEquipped, countItem, removeItem } from '../systems/InventorySystem.js';
-import { shakeAllowed, shadowsEnabled } from '../systems/SettingsSystem.js';
+import { shakeAllowed, shadowsEnabled, isImmortal } from '../systems/SettingsSystem.js';
 
 export default class Player {
   constructor(scene, x, y) {
@@ -241,6 +241,9 @@ export default class Player {
       Bus.emit('play-sound', 'hit_flesh');
     } else Bus.emit('play-sound', 'player_hurt');
     dmg = Math.max(1, Math.round(dmg));
+    // Immortal (test-only) — clamp damage to a single hp-tick so the player
+    // still sees the red flash + knockback feedback but never reaches 0 hp.
+    if (isImmortal()) dmg = 1;
     S.player.hp -= dmg;
     this.regenDelay = 2;
     this.scene.fxHit?.(this.sprite.x, this.sprite.y);
@@ -252,7 +255,8 @@ export default class Player {
     }
     if (shakeAllowed()) this.scene.cameras.main.shake(140, 0.005);
     GameState.notify('PLAYER');
-    if (S.player.hp <= 0) this.die();
+    if (S.player.hp <= 0 && !isImmortal()) this.die();
+    else if (isImmortal()) S.player.hp = Math.max(1, S.player.hp);
     return dmg;
   }
 
@@ -293,15 +297,16 @@ export default class Player {
     S.player.thirst = Math.max(0, S.player.thirst - diff.drain * resist * hot * dt * 0.26 * detached(100));
     if (ctx.envCold && D.warmthCapable < 3 && !ctx.nearWarmth) {
       S.player.coldExposure = (S.player.coldExposure || 0) + dt;
-      if (S.player.coldExposure > 12) S.player.hp -= 0.7 * dt;
+      if (S.player.coldExposure > 12 && !isImmortal()) S.player.hp -= 0.7 * dt;
     } else S.player.coldExposure = Math.max(0, (S.player.coldExposure || 0) - dt * 2);
     if (S.player.hunger > 42 && S.player.thirst > 20 && S.player.hp < D.maxHp) {
       S.player.hp = Math.min(D.maxHp, S.player.hp + PLAYER_CONFIG.regenPerSec * dt);
     }
-    if (S.player.hunger <= 0) S.player.hp -= PLAYER_CONFIG.starveHpData * dt * chilled;
-    if (S.player.thirst <= 0) S.player.hp -= PLAYER_CONFIG.starveHpData * 1.35 * dt;
-    if (S.player.hp <= 0) this.die();
-    else GameState.notify('PLAYER');
+    if (S.player.hunger <= 0 && !isImmortal()) S.player.hp -= PLAYER_CONFIG.starveHpData * dt * chilled;
+    if (S.player.thirst <= 0 && !isImmortal()) S.player.hp -= PLAYER_CONFIG.starveHpData * 1.35 * dt;
+    if (S.player.hp <= 0 && !isImmortal()) this.die();
+    else if (!isImmortal()) GameState.notify('PLAYER');
+    else { S.player.hp = Math.max(1, S.player.hp); GameState.notify('PLAYER'); }
 
     function detached(n) {
       return n / 100; // drain rates expressed per-second already; scale to 0..1

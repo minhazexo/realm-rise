@@ -54,7 +54,11 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   shadows: true,
   autosave: true,
   autosaveSec: AUTOSAVE_INTERVAL_SEC,  // 100s default
-  movementScheme: 'wasd' // 'wasd' | 'arrows'
+  movementScheme: 'wasd', // 'wasd' | 'arrows'
+  /** TEST ONLY — when true, the player cannot die. Survival drains are paused
+   *  and incoming damage is treated as 1 hp-tick of scratch damage. Never save
+   *  this as true in a shipped release. */
+  immortal: false
 });
 
 /** Allowed ranges / sets, used by the panel for clamping and validation. */
@@ -69,6 +73,14 @@ export const SETTINGS_LIMITS = Object.freeze({
 
 /* ── Validation ─────────────────────────────────────────────────────────── */
 
+/** Top-level scalar (non-nested) settings keys. Anything outside this list
+ *  is treated as a nested object (volumes, toggles) or a future generic
+ *  field. If you add a new boolean/string/number setting, add it here too. */
+const SCALAR_KEYS = [
+  'difficulty', 'uiScale', 'textSize', 'particles', 'shadows',
+  'autosave', 'autosaveSec', 'movementScheme', 'immortal'
+];
+
 /**
  * Normalise a settings object against the defaults. Strips unknown keys,
  * clamps out-of-range values, fills missing fields. Returns a NEW object so
@@ -77,7 +89,7 @@ export const SETTINGS_LIMITS = Object.freeze({
 export function normaliseSettings(input) {
   const out = deepClone(SETTINGS_DEFAULTS);
   if (!input || typeof input !== 'object') return out;
-  for (const k of ['difficulty', 'uiScale', 'textSize', 'particles', 'shadows', 'autosave', 'autosaveSec', 'movementScheme']) {
+  for (const k of SCALAR_KEYS) {
     if (input[k] === undefined) continue;
     out[k] = clampScalar(k, input[k]);
   }
@@ -283,6 +295,12 @@ export function shadowsEnabled() {
 /** Resolve movement key set for the current scheme (always falls back). */
 export function movementKey() {
   return GameState.s?.settings?.movementScheme || 'wasd';
+}
+
+/** Test-only god mode. When true the player cannot die — damage is clamped to
+ *  a single hp-tick of scratch damage and survival drains are skipped. */
+export function isImmortal() {
+  return GameState.s?.settings?.immortal === true;
 }
 function clampScalar(key, raw) {
   const lim = SETTINGS_LIMITS[key];

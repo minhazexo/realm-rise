@@ -578,6 +578,26 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 @media (max-width: 480px) { .menu-title { font-size: 26px; } .creation-panel { padding: 16px; } .k-grid { grid-template-columns: 1fr; } }
 /* ─────────────────────────────────────────────────────────────────────────
    Settings panel (spec §59) — themed to match the dark-fantasy palette.
+/* ─────────────────────────────────────────────────────────────────────────
+   Settings panel (spec §59) — themed to match the dark-fantasy palette.
+   Uses CSS custom properties set by SettingsSystem (--ui-scale, --text-scale).
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* The menu root sets `pointer-events: none` so the Phaser canvas behind it
+   still receives clicks for the back button to work. The menu-panel sibling
+   opts back in. The Settings / HowTo / Credits overlays are also direct
+   children of .menu-root — without this rule their sliders, toggles, pills,
+   and BACK buttons cannot be clicked because the canvas intercepts events. */
+.menu-root .settings-panel,
+.menu-root .howto-panel,
+.menu-root .credits-panel,
+.menu-root .creation-panel,
+.menu-root .load-panel {
+  pointer-events: auto;
+}
+
+/* Same fix for overlays mounted directly under .app-root (in-world). */
+.app-root > .panel { pointer-events: auto; }
    Uses CSS custom properties set by SettingsSystem (--ui-scale, --text-scale).
    ───────────────────────────────────────────────────────────────────────── */
 
@@ -707,6 +727,71 @@ html[data-reduced-motion="1"] *::after {
 .setting-toggle-switch.on .setting-toggle-knob {
   transform: translateX(18px);
   background: var(--ink);
+.setting-toggle-switch.on .setting-toggle-knob {
+  transform: translateX(18px);
+  background: var(--ink);
+}
+
+/* ON / OFF button — real <button> element, role=switch. Used for the
+   Immortal toggle and any other destructive test-mode flag. Right-click is
+   blocked on the button so the browser context menu never intercepts. */
+.setting-onoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(20, 28, 38, 0.85);
+  border: 1px solid rgba(180, 150, 80, 0.35);
+  border-radius: 6px;
+  padding: 4px 8px 4px 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--parch);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+.setting-onoff:hover { border-color: var(--gold); }
+.setting-onoff:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.setting-onoff.on {
+  background: linear-gradient(180deg, #4a6a2a, #2a4018);
+  border-color: #8aa05a;
+  color: #e8f4c8;
+  box-shadow: 0 0 8px rgba(140, 180, 80, 0.45);
+}
+.setting-onoff.danger.on {
+  background: linear-gradient(180deg, #8a3a28, #4a1a10);
+  border-color: var(--blood);
+  color: #ffe0d8;
+  box-shadow: 0 0 10px rgba(224, 90, 78, 0.55);
+}
+.setting-onoff-track {
+  position: relative;
+  width: 28px;
+  height: 14px;
+  background: rgba(8, 12, 18, 0.6);
+  border: 1px solid rgba(180, 150, 80, 0.45);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.setting-onoff.on .setting-onoff-track { border-color: currentColor; }
+.setting-onoff-knob {
+  position: absolute;
+  top: 1px; left: 1px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--parch);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.setting-onoff.on .setting-onoff-knob {
+  transform: translateX(14px);
+  background: #fff;
+}
+.setting-onoff-label {
+  min-width: 28px;
+  text-align: left;
+  font-weight: 700;
+}
 }
 
 /* Slider — fully themed with a gold fill behind a knob. */
@@ -752,6 +837,31 @@ html[data-reduced-motion="1"] *::after {
   font-size: 11px;
   color: var(--gold);
 /* Key binding reference list */
+/* Quick mute button */
+.settings-mute { align-self: flex-start; padding: 4px 12px; font-size: 11px; }
+
+/* Test-only flag (god mode, debug toggles). Visible warning so players
+   know the option exists and what it does. */
+.setting-test-flag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: rgba(224, 90, 78, 0.12);
+  border: 1px solid rgba(224, 90, 78, 0.45);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--parch);
+}
+.setting-test-flag strong {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  color: var(--blood);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.setting-test-flag span { color: var(--parch-dim); opacity: 0.85; }
 .settings-keybinds {
   margin-top: 4px;
   padding: 10px 12px;
