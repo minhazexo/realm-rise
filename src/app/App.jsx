@@ -16,6 +16,7 @@ import Panels from './components/Panels.jsx';
 import TouchControls from './components/TouchControls.jsx';
 import DeathOverlay from './components/DeathOverlay.jsx';
 import BossBar from './components/BossBar.jsx';
+import AchievementPopup from './components/AchievementPopup.jsx';
 import RulerPanel from './components/RulerPanel.jsx';
 import DebugPanel from './components/DebugPanel.jsx';
 
@@ -44,6 +45,8 @@ export default function App() {
           <HUD />
           <QuestTracker />
           <Minimap />
+          <BossBar />
+          <AchievementPopup />
           {ui.panel && <Panels panel={ui.panel} />}
           {ui.dialogue && <Dialogue />}
           {ui.ending && <RulerPanel />}

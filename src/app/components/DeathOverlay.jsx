@@ -5,36 +5,30 @@ import { CH } from '../../game/core/EventBus.js';
 
 export default function DeathOverlay({ onRespawn }) {
   const handleRespawn = () => {
-    const S = GameState.s;
-    // Respawn at world origin (or settlement if founded)
-    if (S.settlement.founded && S.settlement.pos) {
-      S.world.px = S.settlement.pos.x;
-      S.world.py = S.settlement.pos.y + 40;
-    } else {
-      S.world.px = 0;
-      S.world.py = 260;
-    }
-    const D = S.player.derived;
-    S.player.hp = Math.round(D.maxHp * 0.4);
-    S.player.stamina = D.maxStamina;
-    S.player.hunger = Math.max(20, S.player.hunger);
-    GameState.session.death = null;
-    GameState.session.screen = 'world';
-    GameState.notify(CH.SCREEN);
-    // Tell Phaser to reset player position
+    // Phase E: use the canonical Player.respawn() (position, visibility,
+    // body, vitals, session_dead) — the old hand-rolled version left the
+    // sprite invisible, the body disabled and session_dead set, soft-locking
+    // the game. Then scatter nearby enemies so there's no instant re-kill.
     import('../../game/main.js').then((m) => {
       const scene = m.worldScene?.();
-      if (scene && scene.player) {
-        scene.player.sprite.setPosition(S.world.px, S.world.py);
+      if (scene?.player) {
+        scene.player.respawn();
+        scene.player.iFrames = 2; // grace period
+        scene.resetNearbyEnemies(700);
+        const S = GameState.s;
+        S.world.px = Math.round(scene.player.sprite.x);
+        S.world.py = Math.round(scene.player.sprite.y);
+        GameState.notify(CH.SCREEN, CH.PLAYER);
       }
     });
     onRespawn?.();
   };
 
   const handleSurrender = () => {
-    GameState.session.death = null;
-    GameState.session.screen = 'world';
-    GameState.notify(CH.SCREEN);
+    // Return to the main menu (was: re-entered the world while dead).
+    GameState.session.uiPanel = null;
+    GameState.session.paused = false;
+    import('../../game/main.js').then((m) => m.setScreen('menu'));
   };
 
   return (

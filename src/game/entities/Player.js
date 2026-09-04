@@ -40,6 +40,10 @@ export default class Player {
     this.wantDodge = false;
     this.holdStart = null;
     this.regenDelay = 0;
+    // Phase B combat state: light-attack combo chain + parry window.
+    this.comboCount = 0;
+    this.comboWindow = 0;
+    this.blockStartAt = 0;
     this._mv = new Phaser.Math.Vector2();
     // Combat juice state
     this.hitstopTimer = 0;     // freeze frames remaining on hitstop
@@ -63,16 +67,20 @@ export default class Player {
       return; // skip all other update logic during hitstop
     }
     const keys = ctx.keys, mv = this._mv.set(0, 0);
+    const bk = ctx.bindKeys || {};
     if (!ctx.uiBlocked) {
-      if (keys.A.isDown || keys.LEFT.isDown) mv.x -= 1;
-      if (keys.D.isDown || keys.RIGHT.isDown) mv.x += 1;
-      if (keys.W.isDown || keys.UP.isDown) mv.y -= 1;
-      if (keys.S.isDown || keys.DOWN.isDown) mv.y += 1;
+      if (keys.A.isDown || keys.LEFT.isDown || bk.left?.isDown) mv.x -= 1;
+      if (keys.D.isDown || keys.RIGHT.isDown || bk.right?.isDown) mv.x += 1;
+      if (keys.W.isDown || keys.UP.isDown || bk.up?.isDown) mv.y -= 1;
+      if (keys.S.isDown || keys.DOWN.isDown || bk.down?.isDown) mv.y += 1;
       if (ctx.joystick) { mv.x += ctx.joystick.x; mv.y += ctx.joystick.y; }
     }
     const moving = mv.lengthSq() > 0.01;
     if (moving) mv.normalize();
-    this.blocking = !ctx.uiBlocked && !moving && (ctx.pointer?.rightButtonDown() || ctx.mobileBlock === true);
+    // Phase B: moving block at reduced speed (was: full stop required).
+    const wantBlock = !ctx.uiBlocked && (ctx.pointer?.rightButtonDown() || ctx.mobileBlock === true);
+    if (wantBlock && !this.blocking) this.blockStartAt = performance.now();
+    this.blocking = wantBlock;
 
     // dodge roll
     this.cool.dodge = Math.max(0, this.cool.dodge - dt);
@@ -106,9 +114,14 @@ export default class Player {
 
     // acceleration/friction smoothing (spec §5)
     let speed = D.moveSpeed * (ctx.envCold ? 0.88 : 1);
+    if (this.blocking) {
+      // Blocking on the move: 50% speed; tower shields heavier (movePenalty).
+      const offDef = S.player.equipment.offhand ? getItem(S.player.equipment.offhand.id) : null;
+      speed *= 0.5 * (1 - (offDef?.movePenalty || 0));
+    }
     const sprinting =
       !ctx.uiBlocked && !this.blocking && moving &&
-      ((keys.SHIFT.isDown || ctx.mobileSprint === true)) && S.player.stamina > 4;
+      ((keys.SHIFT.isDown || bk.sprint?.isDown || ctx.mobileSprint === true)) && S.player.stamina > 4;
     if (sprinting) {
       speed *= D.sprintMult;
       S.player.stamina -= 13 * D.staminaCostMult * dt;
@@ -158,6 +171,32 @@ export default class Player {
 
   /* ── Attacks (spec §18) ──────────────────────────────────────────────── */
 
+  /** Heavy attacks require the `war_heavy` skill or a greatsword. */
+  heavyUnlocked() {
+    const D = GameState.s.player.derived || {};
+    if (D.heavyUnlocked) return true;
+    const wdef = this.weaponDef();
+    return !!(wdef?.weapon?.heavy);
+  }
+
+  /**
+   * Called on pointer-up after a hold. Tap = light (already fired on
+   * pointer-down); hold >280ms with the skill = heavy.
+   */
+  requestHeavyRelease(pointerWorld, enemies, floaters) {
+    if (this.holdStart == null) return;
+    const heldMs = performance.now() - this.holdStart;
+    this.holdStart = null;
+    if (heldMs < 280) return;
+    if (!this.heavyUnlocked()) {
+      floaters?.add?.(this.sprite.x, this.sprite.y - 40, 'Heavy locked (Warrior skill)', '#9fb4cc');
+      return;
+    }
+    // Only heavy if the light swing already recovered — otherwise queue nothing.
+    if (this.cool.attack > 0.15) return;
+    this.tryAttack({ heavy: true }, pointerWorld, enemies, floaters);
+  }
+
   tryAttack(opts, pointerWorld, enemies, floaters) {
     const S = GameState.s, D = S.player.derived;
     if (this.cool.attack > 0 || this.blocking || S.session_dead) return;
@@ -194,11 +233,32 @@ export default class Player {
       .setVisible(true).setScale(opts.heavy ? 1.25 : 1);
     this.scene.tweens.add({ targets: this.slashFx, angle: '-=80', alpha: 0, duration: 130, onComplete: () => this.slashFx.setVisible(false).setAlpha(1) });
 
-    let dmgBase = wpn.dmg * D.meleeDmgMult;
-    if (opts.heavy) dmgBase *= D.heavyDmgMult;
+    // ── Weapon style identity: slash / crush / pierce feel different ──
+    const style = wpn.style || 'slash';
+    let styleDmgMult = 1, styleReachMult = 1, styleArcMult = 1;
+    if (style === 'crush') { styleDmgMult = 1.15; styleArcMult = 1.32; } // wide cleave
+    else if (style === 'pierce') { styleReachMult = 1.35; styleArcMult = 0.36; } // narrow thrust
+    let dmgBase = wpn.dmg * D.meleeDmgMult * styleDmgMult;
+    // Phase B combo: light→light→finisher. 3rd consecutive light within
+    // 0.9s deals 1.5× + knockback. Heavy attacks reset the chain.
+    let isFinisher = false;
+    if (opts.heavy) {
+      if (!this.heavyUnlocked()) opts.heavy = false;
+      else dmgBase *= D.heavyDmgMult;
+      this.comboCount = 0; this.comboWindow = 0;
+    } else if (wpn.style !== 'bow') {
+      const now = performance.now() / 1000;
+      if (now < this.comboWindow) this.comboCount += 1; else this.comboCount = 1;
+      this.comboWindow = now + 0.9;
+      if (this.comboCount >= 3) {
+        isFinisher = true;
+        dmgBase *= 1.5;
+        this.comboCount = 0; this.comboWindow = 0;
+      }
+    }
     if (S.player.hp < D.maxHp * 0.35 && D.berserk > 1) dmgBase *= D.berserk;
-    const reach = wpn.range * (wdef?.weapon?.reachBonusVsAnimals ? 1.12 : 1);
-    const arcHalf = (PLAYER_CONFIG.attackArcDeg * 0.55 * Math.PI) / 180;
+    const reach = wpn.range * styleReachMult;
+    const arcHalf = (PLAYER_CONFIG.attackArcDeg * 0.55 * styleArcMult * Math.PI) / 180;
 
     let hitAny = false;
     for (const e of enemies) {
@@ -207,20 +267,32 @@ export default class Player {
       if (dx * dx + dy * dy > (reach + e.def.radius * 0.5) ** 2) continue;
       if (Math.abs(Phaser.Math.Angle.Wrap(Math.atan2(dy, dx) - ang)) > arcHalf) continue;
       hitAny = true;
+      let dmg = dmgBase;
+      // Spear bonus applies per-target (animals), not blindly to the swing.
+      if (wdef?.weapon?.reachBonusVsAnimals && /wolf|boar|bear|dire|beast|animal/i.test(`${e.key || ''} ${e.def?.name || ''} ${e.def?.kind || ''}`)) dmg *= 1.12;
       const crit = Math.random() < D.critMelee + (wpn.crit || 0);
-      e.takeDamage(Math.round(dmgBase * (crit ? 1.85 : 1)), ox, oy, floaters, crit);
+      e.takeDamage(Math.round(dmg * (crit ? 1.85 : 1)), ox, oy, floaters, crit || isFinisher);
+      if (isFinisher && e.sprite?.body && !e.dead) {
+        // Finisher knockback shove along the swing direction.
+        const ka = Math.atan2(e.sprite.y - oy, e.sprite.x - ox);
+        e.sprite.body.velocity.set(Math.cos(ka) * 320, Math.sin(ka) * 320);
+        floaters?.add?.(e.sprite.x, e.sprite.y - 44, 'Finisher!', '#ffd66b', 1.15);
+      }
     }
     wearEquipped('weapon', opts.heavy ? 2 : 1, D.toolWearMult);
     if (hitAny) {
       this.scene.onMeleeImpact(ox, oy, !!opts.heavy);
       // ── Combat juice: hitstop + camera shake ─────────────────────────
-      // Brief freeze frames give attacks weight and impact.
-      const hitstopDuration = opts.heavy ? 0.065 : 0.035;
+      // Brief freeze frames give attacks weight and impact. Crush cleaves
+      // shake harder even on light swings (wide-arc identity).
+      const isCrush = (wpn.style || 'slash') === 'crush';
+      const bigHit = opts.heavy || isFinisher;
+      const hitstopDuration = bigHit ? 0.065 : isCrush ? 0.045 : 0.035;
       this.hitstopTimer = hitstopDuration;
       // Camera shake scaled by damage dealt — crits shake harder. Respects
       // both screenShake and reducedMotion user preferences.
       if (shakeAllowed()) {
-        const shakeIntensity = opts.heavy ? 0.008 : 0.004;
+        const shakeIntensity = bigHit ? 0.008 : isCrush ? 0.006 : 0.004;
         this.scene.cameras.main.shake(80, shakeIntensity);
       }
       // Kill streak: restore a tiny bit of stamina on hit to reward aggression
@@ -233,8 +305,18 @@ export default class Player {
   takeDamage(rawDmg, srcX, srcY) {
     const S = GameState.s, D = S.player.derived;
     if (this.iFrames > 0 || S.session_dead) return 0;
-    let dmg = rawDmg * (1 - D.damageReduction);
+    // Phase B parry: blocking tapped within 150ms of impact = full negate +
+    // stamina reward. Reads as skill, not a stat check.
     const offDef = S.player.equipment.offhand ? getItem(S.player.equipment.offhand.id) : null;
+    if (this.blocking && offDef?.shieldBlock && performance.now() - this.blockStartAt < 150 && S.player.stamina > 5) {
+      S.player.stamina = Math.min(D.maxStamina, S.player.stamina + 6);
+      this.scene.fxHit?.(this.sprite.x, this.sprite.y - 20);
+      GameState.session.floatRenderer?.(this.sprite.x, this.sprite.y - 44, 'Parried!', '#8fd8ff', 1.2);
+      Bus.emit('play-sound', 'parry');
+      GameState.notify('PLAYER');
+      return 0;
+    }
+    let dmg = rawDmg * (1 - D.damageReduction);
     if (this.blocking && offDef?.shieldBlock && S.player.stamina > 5) {
       dmg *= 1 - offDef.shieldBlock;
       S.player.stamina = Math.max(0, S.player.stamina - D.blockStaminaCost);
@@ -253,6 +335,9 @@ export default class Player {
       const a = Math.atan2(this.sprite.y - srcY, this.sprite.x - srcX);
       this.sprite.body.velocity.set(Math.cos(a) * 210, Math.sin(a) * 210);
     }
+    // Armor soaks damage — and soaks durability. Slow wear so a set lasts.
+    if (this.blocking && offDef?.shieldBlock) wearEquipped('offhand', 1, D.toolWearMult);
+    else if (Math.random() < 0.35) wearEquipped('armor', 1, D.toolWearMult);
     if (shakeAllowed()) this.scene.cameras.main.shake(140, 0.005);
     GameState.notify('PLAYER');
     if (S.player.hp <= 0 && !isImmortal()) this.die();

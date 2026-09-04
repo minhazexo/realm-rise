@@ -56,7 +56,17 @@ export function refreshDynamicLights(scene) {
     }
   }
 
-  // Add / update active lights
+  // Add / update active lights — with Phase B fire flicker (±12% at ~7Hz
+  // with per-light phase, plus dimming at full day so torches read at night).
+  const now = (typeof performance !== 'undefined' ? performance.now() : 0);
+  let dayDim = 1;
+  try {
+    const t = GameState.s?.world?.timeOfDay;
+    if (typeof t === 'number') {
+      const isNight = t > 0.78 || t < 0.24;
+      dayDim = isNight ? 1 : 0.45;
+    }
+  } catch { /* default full bright */ }
   for (const [key, def] of wanted) {
     let entry = scene._dynLights.get(key);
     if (!entry) {
@@ -66,18 +76,19 @@ export function refreshDynamicLights(scene) {
         .setDepth(3850)
         .setScrollFactor(1)
         .setScale(def.scale);
-      entry = { sprite, def };
+      entry = { sprite, def, phase: Math.random() * Math.PI * 2 };
       scene._dynLights.set(key, entry);
     } else {
       entry.sprite.setPosition(def.x, def.y);
-      entry.sprite.setScale(def.scale);
       entry.def = def;
     }
+    const flicker = 1 + 0.12 * Math.sin(now / 140 + (entry.phase || 0));
+    entry.sprite.setScale(def.scale * flicker * dayDim);
   }
 }
 
-/** Compute which dynamic lights should exist right now. */
-function collectWantedLights() {
+/** Compute which dynamic lights should exist right now. Exported for NightLights. */
+export function collectWantedLights() {
   const out = new Map();
   const S = GameState.s;
   if (!S) return out;

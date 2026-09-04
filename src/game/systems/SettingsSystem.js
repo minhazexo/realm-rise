@@ -22,6 +22,7 @@ export const SAVE_SETTINGS_KEYS = [
   'difficulty',
   'volumes',
   'toggles',
+  'keybinds',
   'uiScale',
   'textSize',
   'particles',
@@ -30,12 +31,30 @@ export const SAVE_SETTINGS_KEYS = [
   'autosaveSec',
   'movementScheme',
   'graphicsQuality',
-  'distanceFog'
+  'distanceFog',
+  'fpsCap'
 ];
 
 // Keys that also live in `rotr_prefs_v1` so they survive browser restarts
 // even with no save. Defaults layer wins if a value is undefined.
 const PREFS_KEY = 'rotr_prefs_v1';
+
+/**
+ * Default key bindings (Phaser KeyCodes names). WASD + arrows are always
+ * active as movement fallbacks; these add the player's own alternatives.
+ * Actions are bound exclusively to these codes.
+ */
+export const KEYBINDS_DEFAULT = Object.freeze({
+  up: 'W', down: 'S', left: 'A', right: 'D',
+  dodge: 'SPACE', sprint: 'SHIFT',
+  gather: 'E', inventory: 'I', crafting: 'C', map: 'M',
+  journal: 'J', kingdom: 'K', build: 'B', skills: 'P', pause: 'ESC',
+});
+
+/** Validate a single KeyCodes name (letters/digits/underscore, short). */
+export function validKeyCodeName(name) {
+  return typeof name === 'string' && /^[A-Z0-9_]{1,12}$/.test(name);
+}
 
 /** Code-defined defaults — also the schema every UI control binds to. */
 export const SETTINGS_DEFAULTS = Object.freeze({
@@ -46,6 +65,7 @@ export const SETTINGS_DEFAULTS = Object.freeze({
     sfxOn: true,
     screenShake: true,
     reducedMotion: false,
+    photosensitive: false,
     damageNumbers: true,
     hpBarsAbove: true,
     colorblindHints: false
@@ -60,12 +80,16 @@ export const SETTINGS_DEFAULTS = Object.freeze({
   /** Master graphics preset — drives PostFXSystem + fog + particles.
    *  'low' | 'med' | 'high' | 'ultra'. */
   graphicsQuality: 'med',
+  /** FPS cap: 0 = display default (uncapped), else 30/60/120. */
+  fpsCap: 0,
   /** Distance fog (atmospheric perspective) on chunk terrain. */
   distanceFog: true,
   /** TEST ONLY — when true, the player cannot die. Survival drains are paused
    *  and incoming damage is treated as 1 hp-tick of scratch damage. Never save
    *  this as true in a shipped release. */
-  immortal: false
+  immortal: false,
+  /** Player key bindings (KeyCodes names). See KEYBINDS_DEFAULT. */
+  keybinds: { ...KEYBINDS_DEFAULT },
 });
 
 /** Allowed ranges / sets, used by the panel for clamping and validation. */
@@ -74,6 +98,7 @@ export const SETTINGS_LIMITS = Object.freeze({
   textSize:  { min: 0.85, max: 1.4, step: 0.05 },
   autosaveSec: { min: 30, max: 600, step: 10 },
   particles: { allowed: ['off', 'low', 'med', 'high'] },
+  fpsCap: { allowed: [0, 30, 60, 120] },
   movementScheme: { allowed: ['wasd', 'arrows'] },
   difficulty: { allowed: ['story', 'normal', 'hard', 'legendary'] },
   graphicsQuality: { allowed: ['low', 'med', 'high', 'ultra'] }
@@ -87,7 +112,7 @@ export const SETTINGS_LIMITS = Object.freeze({
 const SCALAR_KEYS = [
   'difficulty', 'uiScale', 'textSize', 'particles', 'shadows',
   'autosave', 'autosaveSec', 'movementScheme', 'graphicsQuality',
-  'distanceFog', 'immortal'
+  'distanceFog', 'immortal', 'fpsCap'
 ];
 
 /**
@@ -111,6 +136,11 @@ export function normaliseSettings(input) {
   if (input.toggles && typeof input.toggles === 'object') {
     for (const tk of Object.keys(SETTINGS_DEFAULTS.toggles)) {
       if (typeof input.toggles[tk] === 'boolean') out.toggles[tk] = input.toggles[tk];
+    }
+  }
+  if (input.keybinds && typeof input.keybinds === 'object') {
+    for (const bk of Object.keys(KEYBINDS_DEFAULT)) {
+      if (validKeyCodeName(input.keybinds[bk])) out.keybinds[bk] = input.keybinds[bk];
     }
   }
   return out;
@@ -144,6 +174,7 @@ export function applySettings(settings, opts = {}) {
     // Reduced motion: set on <html> so global CSS can opt out of keyframes.
     document.documentElement.dataset.reducedMotion = s.toggles.reducedMotion ? '1' : '0';
     document.documentElement.dataset.colorblindHints = s.toggles.colorblindHints ? '1' : '0';
+    document.documentElement.dataset.photosensitive = s.toggles.photosensitive ? '1' : '0';
     // Body-level class for quality presets (toggled consumers can read this).
     document.body.dataset.particles = s.particles;
     document.body.dataset.movement = s.movementScheme;
@@ -216,6 +247,7 @@ export function updateSettings(patch) {
   const merged = { ...cur, ...patch };
   if (patch.volumes) merged.volumes = { ...cur.volumes, ...patch.volumes };
   if (patch.toggles) merged.toggles = { ...cur.toggles, ...patch.toggles };
+  if (patch.keybinds) merged.keybinds = { ...cur.keybinds, ...patch.keybinds };
   const normalised = normaliseSettings(merged);
   if (GameState.s) GameState.s.settings = normalised;
   _menuCache = normalised;
@@ -284,7 +316,19 @@ export function shakeAllowed() {
   if (!s) return true;
   if (s.toggles?.screenShake === false) return false;
   if (s.toggles?.reducedMotion === true) return false;
+  if (s.toggles?.photosensitive === true) return false;
   return true;
+}
+
+/**
+ * Phase C photosensitivity mode: kills fullscreen flashes, chromatic
+ * aberration, bloom pulses and shake. Target-only hit tints stay (they
+ * carry hit-confirm information without strobing the screen).
+ */
+export function photosensitiveMode() {
+  const s = GameState.s?.settings;
+  if (!s) return false;
+  return s.toggles?.photosensitive === true;
 }
 
 /** Particle quality multiplier (0 = off). */

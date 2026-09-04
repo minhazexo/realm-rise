@@ -37,6 +37,8 @@ import {
   applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
 } from '../world/chunkPainter.js';
 import { refreshDynamicLights } from '../systems/DynamicLights.js';
+import { updateNightMask } from '../systems/NightLights.js';
+import { updateFogCards } from '../systems/FogCards.js';
 import { updateAmbientParticles, destroyAmbientParticles } from '../systems/AmbientParticles.js';
 
 export const AUTOSAVE_INTERVAL_MS = 100000;
@@ -109,13 +111,30 @@ export default class WorldScene extends Phaser.Scene {
       } catch { /* */ }
     });
 
-    // Boss UI (boss bar)
+    // Boss UI (boss bar) — Phase D: actually publishes session.activeBoss
+    // so the BossBar overlay (now mounted in App.jsx) has data to render.
+    // HP is refreshed every 30 frames in update() via refreshBossBar().
     this.bossUI = {
       _boss: null,
       _phase: 1,
-      show(boss) { this._boss = boss; this._phase = 1; Bus.emit('boss-intro', boss.key); },
-      setPhase(p) { this._phase = p; },
-      hide() { this._boss = null; }
+      show(boss) {
+        this._boss = boss; this._phase = 1;
+        GameState.session.activeBoss = { name: boss.def?.name || boss.key, hp: boss.hp, maxHp: boss.maxHp, phase: 1 };
+        GameState.notify(CH.BOSSBAR);
+        Bus.emit('boss-intro', boss.key);
+      },
+      setPhase(p) {
+        this._phase = p;
+        if (GameState.session.activeBoss) {
+          GameState.session.activeBoss.phase = p;
+          GameState.notify(CH.BOSSBAR);
+        }
+      },
+      hide() {
+        this._boss = null;
+        GameState.session.activeBoss = null;
+        GameState.notify(CH.BOSSBAR);
+      }
     };
 
     this.setupInput();
@@ -126,6 +145,11 @@ export default class WorldScene extends Phaser.Scene {
     this.spawnWildNpcs();
     this.syncPoisMarkers();
     this.refreshPlayerSkin();
+    // Phase B: crafting station radius preview for the React panel.
+    this.refreshStationsNear();
+    GameState.session.showStationRing = (station) => this.showStationRadius(station);
+    // Phase C: night darkness-with-holes mask carries night lighting.
+    if (this.env) this.env.useLightMask = true;
 
     this.time.addEvent({ delay: SETTLEMENT_CONFIG.productionTickSec * 1000, loop: true, callback: () => productionTick(this.player.pos) });
     // Autosave interval honours the player's setting; default still 100s.
@@ -201,6 +225,12 @@ export default class WorldScene extends Phaser.Scene {
 
     // Ambient particles (pollen, mist, birds) — cheap, throttled by quality.
     updateAmbientParticles(this, time, dt);
+    // Phase D: world-space drifting fog banks around the player.
+    try { updateFogCards(this, dt); } catch { /* canvas unavailable */ }
+    // Phase D: tutorial hint chain (one hint per 5s tick max).
+    if (this._frame % 300 === 0) {
+      import('../systems/TutorialSystem.js').then((m) => { try { m.tutorialTick(); } catch { /* hints never crash */ } });
+    }
 
     // Broadcast player world position so follow-the-player lights (torch)
     // can track without polling.
@@ -212,6 +242,12 @@ export default class WorldScene extends Phaser.Scene {
       if (e.dead) continue;
       if ((e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 1250 * 1250) e.update(dt, this.envContextInput());
       else if ((e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 1800 * 1800) e.update(dt, this.envContextInput());
+      // Phase D: raiders besiege buildings when the player won't engage.
+      try { this.enemyRaidTick(e, px, py, dt); } catch { /* raid tick never crashes */ }
+    }
+    // Phase D: faction raid scheduler (~30s cadence).
+    if (this._frame % 1800 === 0) {
+      import('../systems/RaidSystem.js').then((m) => { try { m.raidTick(this); } catch { /* raids never crash */ } });
     }
     GameState.session.inCombat = this.enemies.some((e) => !e.dead && e.sprite && (e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 220 * 220);
 
@@ -235,6 +271,17 @@ export default class WorldScene extends Phaser.Scene {
     if (this._frame++ % 30 === 0) {
       S.world.px = Math.round(this.player.sprite.x);
       S.world.py = Math.round(this.player.sprite.y);
+      try { this.refreshBossBar(px, py); } catch { /* boss UI cosmetic */ }
+    }
+    // Phase C: night lighting mask redraw (every 4th frame, self-skips by day).
+    if (this._frame % 4 === 0) {
+      try { updateNightMask(this); } catch { /* canvas unavailable */ }
+    }
+    // Phase B cadence: station proximity follows the player; chunk relight
+    // tracks the clock without per-frame tint churn.
+    if (this._frame % 60 === 0) {
+      try { this.refreshStationsNear(); } catch { /* player may be dead */ }
+      try { this.relightChunks(); } catch { /* textures may be gone */ }
     }
     this.saveAcc += dt;
   }
@@ -242,6 +289,7 @@ export default class WorldScene extends Phaser.Scene {
   envContextInput() {
     return {
       keys: this.keys,
+      bindKeys: this.bindKeys,
       pointer: this.input.activePointer,
       pointerWorld: this.pointerWorld,
       joystick: GameState.session.joystick,
@@ -330,10 +378,14 @@ export default class WorldScene extends Phaser.Scene {
       this.spawnNode(type, nx, ny, stateKey, st);
     }
 
-    // enemies — fewer, fewer near spawn
+    // enemies — fewer near spawn AND never inside the settlement safe
+    // zone (Phase D: 700px around the Town Hall; raids bypass this via
+    // spawnRaidParty, which is explicit and announced).
     const enemyR = hash(cx * 5, cy * 13);
     const distFromSpawn = Math.hypot(oX - 0, oY - 260);
-    if (enemyR < 0.12 && distFromSpawn > 900) {
+    const home = GameState.s.settlement?.pos;
+    const distFromHome = home ? Math.hypot(oX + cs / 2 - home.x, oY + cs / 2 - home.y) : Infinity;
+    if (enemyR < 0.12 && distFromSpawn > 900 && distFromHome > 700) {
       const key = this.rollEnemy(biomeId, hash(cx * 13 + 3, cy * 5 + 9));
       if (key) this.spawnEnemy(key, oX + cs / 2, oY + cs / 2);
     }
@@ -343,7 +395,9 @@ export default class WorldScene extends Phaser.Scene {
     const def = getNodeDef(type);
     if (!def) return;
     const depleted = state?.depletedAt && state.regrowIn && state.regrowIn > GameState.s.meta.playSeconds;
-    const img = this.add.image(x, y, depleted ? (def.emptyTex || def.tex) : def.tex).setDepth(5);
+    // Phase B: Y-sort nodes like every other entity (was fixed depth 5, so
+    // trees popped through the player). Small props keep a +0 nudge via y.
+    const img = this.add.image(x, y, depleted ? (def.emptyTex || def.tex) : def.tex).setDepth(Math.round(y));
     if (def.tint) img.setTint(def.tint);
     if (def.solid) img.setName('solid-' + def.solid);
     const node = {
@@ -354,6 +408,16 @@ export default class WorldScene extends Phaser.Scene {
       ticks: 0
     };
     this.nodes.set(node.uid, node);
+    // Phase B: wind sway on every 3rd tree (deterministic) — subtle ±1.5°
+    // rotation so forests feel alive without hundreds of heavy tweens.
+    if (/tree|pine|oak|palm|cactus/i.test(`${type} ${def.tex || ''}`) && (Math.round(x + y) % 3 === 0)) {
+      try {
+        this.tweens.add({
+          targets: img, angle: 1.5, duration: 2200 + (Math.abs(Math.round(x)) % 900),
+          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        });
+      } catch { /* tween manager may be unavailable in tests */ }
+    }
   }
 
   rollEnemy(biomeId, rnd) {
@@ -424,9 +488,18 @@ export default class WorldScene extends Phaser.Scene {
 
     n.hp -= 1;
     Bus.emit('play-sound', !needed ? 'pickup' : needed === 'pick' ? 'mine' : 'chop');
-    const nodeHasTicks = n.def.solid;
     if (n.hp <= 0) this.breakNode(n, mult);
-    else { this.floats.add(n.x, n.y - 30, '…', '#ffe9c9'); this.onMeleeImpact(n.x, n.y, false); }
+    else {
+      // Hit feedback: remaining-hits pip + impact wiggle so every swing reads.
+      const left = Math.max(1, n.hp);
+      this.floats.add(n.x, n.y - 30, left > 1 ? `${left}` : '…', '#ffe9c9', 0.9);
+      this.onMeleeImpact(n.x, n.y, false);
+      try {
+        if (n.img && n.img.scene) {
+          this.tweens.add({ targets: n.img, x: n.x + 2, duration: 45, yoyo: true, repeat: 1, onComplete: () => n.img?.setPosition(n.x, n.y) });
+        }
+      } catch { /* cosmetic */ }
+    }
   }
 
   breakNode(n, mult) {
@@ -437,10 +510,20 @@ export default class WorldScene extends Phaser.Scene {
     let gatherAmt = Math.round((def.yieldBase[0] + rng() * (def.yieldBase[1] - def.yieldBase[0])) * mult * D.gatherYield);
     if (def.hardMinProf && (S.player.professions[def.prof]?.lv || 0) < def.hardMinProf) gatherAmt = Math.max(1, Math.floor(gatherAmt * 0.3));
     addItem(def.yRes, gatherAmt);
-    this.floats.add(n.x, n.y - 40, `+${gatherAmt} ${itemName_of(def.yRes)}`, '#a8d890', 1.2);
+    // Phase C gathering tiers: common pop → rich burst → rare eruption.
+    const RARE_YIELD = ['crystal', 'moonstone', 'ancient_core', 'ancient_relic', 'dragon_scale', 'gold_nugget', 'silver'];
+    const isRare = RARE_YIELD.includes(def.yRes);
+    const tier = isRare || gatherAmt >= 8 ? 2 : gatherAmt >= 4 ? 1 : 0;
+    this.floats.add(n.x, n.y - 40, `+${gatherAmt} ${itemName_of(def.yRes)}`, tier === 2 ? '#ffd66b' : '#a8d890', tier === 2 ? 1.5 : tier === 1 ? 1.2 : 1);
+    if (tier === 1) this.spawnBurst(n.x, n.y, 'fx_hitflash');
+    else if (tier === 2) {
+      this.spawnBurst(n.x, n.y, 'fx_ring');
+      this.spawnBurst(n.x, n.y, 'fx_hitflash');
+      try { this.postFX?.pulse?.(); } catch { /* cosmetic */ }
+    }
     GameState.notify(CH.INVENTORY);
     profXP(def.prof, def.xpPerHit || 2);
-    awardXP(GATHER_CONFIG_TICK_XP, 'gather');
+    awardXP(GATHER_CONFIG.tickXp, 'gather');
     import('../systems/QuestEngine.js').then((q) => q.handleEvent({ type: 'gather', item: def.yRes, amount: gatherAmt }));
     Bus.emit('play-sound', 'pickup');
 
@@ -906,6 +989,47 @@ export default class WorldScene extends Phaser.Scene {
     GameState.session.stationsNear = near;
   }
 
+  /**
+   * Phase B: draw the 200px station radius ring around each complete
+   * building providing `station` (forge, kitchen, …). Called from the
+   * crafting UI via `GameState.session.showStationRing`. Auto-fades.
+   */
+  showStationRadius(station) {
+    if (!station) return;
+    this._stationRings?.forEach((g) => g.destroy());
+    this._stationRings = [];
+    for (const b of GameState.s.settlement.buildings) {
+      if (!b.complete) continue;
+      const def = getBuildingDef(b.key);
+      if (def?.station !== station) continue;
+      const g = this.add.graphics().setDepth(6);
+      g.lineStyle(2, 0x8fd8ff, 0.9);
+      g.strokeCircle(b.x, b.y, 200);
+      g.fillStyle(0x8fd8ff, 0.06);
+      g.fillCircle(b.x, b.y, 200);
+      this.tweens.add({ targets: g, alpha: 0, duration: 2500, onComplete: () => g.destroy() });
+      this._stationRings.push(g);
+    }
+  }
+
+  /**
+   * Phase B: real ground relight. Tints active chunk images toward a cool
+   * night blue (or warm dawn/dusk) instead of relying only on the dark
+   * overlay — the ground itself now participates in day/night.
+   */
+  relightChunks() {
+    const t = GameState.s.world.timeOfDay;
+    const DAWN_T = 0.24, DUSK_T = 0.78;
+    const isNight = t > DUSK_T || t < DAWN_T;
+    const golden = (t > 0.2 && t < 0.3) || (t > 0.72 && t < 0.82);
+    for (const img of this.activeChunks.values()) {
+      if (!img || !img.scene) continue;
+      if (isNight) img.setTint(0x8a94c0);
+      else if (golden) img.setTint(0xffe2b8);
+      else img.clearTint();
+    }
+  }
+
   /* ── Projectiles (spec §18) ─────────────────────────────────────────── */
   setupProjectiles() {
     this.projectiles = [];
@@ -937,8 +1061,8 @@ export default class WorldScene extends Phaser.Scene {
           if (e.dead) continue;
           if ((e.sprite.x - p.x) ** 2 + (e.sprite.y - p.y) ** 2 < (e.def.radius + 8) ** 2) {
             const crit = Math.random() < (p.crit || 0);
+            // NOTE: takeDamage already floats the number — no second floater (was double).
             e.takeDamage(Math.round(p.dmg * (crit ? 1.8 : 1)), p.x, p.y, this.floats, crit);
-            this.floats.add(e.sprite.x, e.sprite.y - 30, `${Math.round(p.dmg * (crit ? 1.8 : 1))}`, crit ? '#ffd66b' : '#ffe9c9', crit ? 1.2 : 1);
             hit = true;
             if (p.pierce > 0) { p.pierce--; p.dmg *= 0.85; continue; }
             break;
@@ -973,6 +1097,17 @@ export default class WorldScene extends Phaser.Scene {
     const l = { img, id, qty, x, y, t: 0 };
     img.on('pointerdown', () => this.pickLoot(l));
     this.loots.push(l);
+    // Phase B: rare+ drops announce themselves — pulsing glow ring on the
+    // ground so rarity reads before pickup, not just after.
+    try {
+      const rarity = getItem(id)?.rarity || 'common';
+      if (['rare', 'epic', 'legendary', 'mythic'].includes(rarity)) {
+        const ring = this.add.image(x, y, 'fx_ring').setDepth(7).setAlpha(0.7)
+          .setScale(rarity === 'common' ? 0.8 : 1.1);
+        this.tweens.add({ targets: ring, alpha: 0.25, scale: 1.5, duration: 700, yoyo: true, repeat: -1 });
+        l.glow = ring;
+      }
+    } catch { /* cosmetic only */ }
   }
 
   dropLootGold(x, y, amount) {
@@ -984,7 +1119,7 @@ export default class WorldScene extends Phaser.Scene {
   updateLoot(px, py) {
     for (const l of [...this.loots]) {
       l.t += 1 / 60;
-      if (l.t > 90) { l.img.destroy(); this.loots = this.loots.filter((q) => q !== l); continue; }
+      if (l.t > 90) { l.img.destroy(); l.glow?.destroy(); this.loots = this.loots.filter((q) => q !== l); continue; }
       if (l.t > 0.6 && (l.x - px) ** 2 + (l.y - py) ** 2 < 70 * 70) this.pickLoot(l);
     }
   }
@@ -993,6 +1128,14 @@ export default class WorldScene extends Phaser.Scene {
     if (l.picked) return;
     const left = addItem(l.id, l.qty);
     const gained = l.qty - left;
+    // Rarity-graded feedback: rare+ gets a ring + post pulse, not just a pop.
+    try {
+      const rarity = getItem(l.id)?.rarity || 'common';
+      if (gained > 0 && ['rare', 'epic', 'legendary', 'mythic'].includes(rarity)) {
+        this.spawnBurst(l.img.x, l.img.y, 'fx_ring');
+        this.postFX?.pulse?.();
+      }
+    } catch { /* cosmetic only */ }
     if (gained > 0) {
       // ── Loot fly-to-player: item arcs toward player before disappearing ──
       const px = this.player.sprite.x, py = this.player.sprite.y;
@@ -1010,6 +1153,7 @@ export default class WorldScene extends Phaser.Scene {
       this.time.delayedCall(100, () => {
         this.floats.add(startX, startY - 24, `+${gained} ${itemName_of(l.id)}`, '#dcead0');
       });
+      l.glow?.destroy();
     } else {
       l.img.destroy();
     }
@@ -1019,6 +1163,56 @@ export default class WorldScene extends Phaser.Scene {
     } else l.qty = left;
     Bus.emit('play-sound', 'pickup');
     GameState.notify(CH.INVENTORY);
+  }
+
+  /**
+   * Phase E: player-remappable keys. WASD + arrows always move (fallbacks);
+   * `bindKeys` holds the player's own movement/dodge/sprint alternatives and
+   * `registerActionBinds()` wires the action keys. Unknown codes fall back
+   * to defaults so a bad bind can never lock the player out.
+   */
+  bindCode(action, fallback) {
+    const KC = Phaser.Input.Keyboard.KeyCodes;
+    const name = GameState.s?.settings?.keybinds?.[action] || fallback;
+    return KC[name] != null ? name : fallback;
+  }
+
+  buildBindKeys() {
+    const KC = Phaser.Input.Keyboard.KeyCodes;
+    const out = {};
+    for (const [action, fb] of [['up', 'W'], ['down', 'S'], ['left', 'A'], ['right', 'D'], ['dodge', 'SPACE'], ['sprint', 'SHIFT']]) {
+      try { out[action] = this.input.keyboard.addKey(KC[this.bindCode(action, fb)]); }
+      catch { try { out[action] = this.input.keyboard.addKey(KC[fb]); } catch { /* ignore */ } }
+    }
+    return out;
+  }
+
+  registerActionBinds() {
+    const kb = this.input.keyboard;
+    // Tear down the previous round (rebinds from settings).
+    if (this._boundActions) {
+      for (const { code, fn } of Object.values(this._boundActions)) {
+        try { kb.off(`keydown-${code}`, fn); } catch { /* ignore */ }
+      }
+    }
+    const defs = [
+      ['gather', 'E', () => { if (!GameState.session.uiPanel) this.doGather(); }],
+      ['inventory', 'I', () => this.togglePanel('inventory')],
+      ['crafting', 'C', () => this.togglePanel('crafting')],
+      ['map', 'M', () => this.togglePanel('map')],
+      ['journal', 'J', () => this.togglePanel('journal')],
+      ['kingdom', 'K', () => this.togglePanel('kingdom')],
+      ['build', 'B', () => this.togglePanel('build')],
+      ['skills', 'P', () => this.togglePanel('skills')],
+      ['pause', 'ESC', () => this.togglePause()],
+      ['dodge', 'SPACE', () => { this.player.wantDodge = true; }],
+    ];
+    this._boundActions = {};
+    for (const [action, fb, fn] of defs) {
+      const code = this.bindCode(action, fb);
+      kb.on(`keydown-${code}`, fn);
+      this._boundActions[action] = { code, fn };
+    }
   }
 
   /* ── Input (spec §5, §41) ───────────────────────────────────────────── */
@@ -1035,20 +1229,15 @@ export default class WorldScene extends Phaser.Scene {
       ? ['UP', 'DOWN', 'LEFT', 'RIGHT']
       : ['W', 'A', 'S', 'D'];
     // Re-derive if the player changes movement scheme mid-session.
+    this.bindKeys = this.buildBindKeys();
     Bus.on('settings-applied', () => {
       this.primaryKeys = movementKey() === 'arrows'
         ? ['UP', 'DOWN', 'LEFT', 'RIGHT']
         : ['W', 'A', 'S', 'D'];
+      this.bindKeys = this.buildBindKeys();
+      this.registerActionBinds();
     });
-    this.input.keyboard.on('keydown-E', () => { if (!GameState.session.uiPanel) this.doGather(); });
-    this.input.keyboard.on('keydown-I', () => this.togglePanel('inventory'));
-    this.input.keyboard.on('keydown-C', () => this.togglePanel('crafting'));
-    this.input.keyboard.on('keydown-M', () => this.togglePanel('map'));
-    this.input.keyboard.on('keydown-J', () => this.togglePanel('journal'));
-    this.input.keyboard.on('keydown-K', () => this.togglePanel('kingdom'));
-    this.input.keyboard.on('keydown-B', () => this.togglePanel('build'));
-    this.input.keyboard.on('keydown-P', () => this.togglePanel('skills'));
-    this.input.keyboard.on('keydown-ESC', () => this.togglePause());
+    this.registerActionBinds();
     this.input.keyboard.on('keydown-F3', (e) => {
       e.originalEvent.preventDefault();
       GameState.session.debugVisible = !GameState.session.debugVisible;
@@ -1082,8 +1271,7 @@ export default class WorldScene extends Phaser.Scene {
     this.input.on('pointerup', (pointer) => {
       if (pointer.rightButtonDown() === false) GameState.session.mobileBlock = false;
     });
-    this.input.keyboard.on('keydown-SHIFT', () => {});
-    this.input.keyboard.on('keydown-SPACE', () => { this.player.wantDodge = true; });
+    // NB: dodge/sprint keys come from registerActionBinds()/bindKeys above.
     this.input.on('pointermove', (pointer) => {
       if (GameState.session.pendingBuild) {
         const w = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
@@ -1119,14 +1307,16 @@ export default class WorldScene extends Phaser.Scene {
     Bus.emit('play-sound', cur === name ? 'ui_click' : 'ui_open');
   }
 
-  /* ── FX helpers ────────────────────────────────────────────────────── */
+  /* ── FX helpers (pooled, auto-destroy — fixes image leak) ────────── */
   fxHit(x, y) {
-    this.add.image(x, y, 'fx_hitflash').setDepth(88).setScale(0.8);
+    const img = this.add.image(x, y, 'fx_hitflash').setDepth(88).setScale(0.8);
+    this.tweens.add({ targets: img, alpha: 0, scale: 1.15, duration: 180, onComplete: () => img.destroy() });
   }
   fxDeath(x, y) {
-    this.add.image(x, y, 'fx_ring').setDepth(87).setAlpha(0.8);
+    const img = this.add.image(x, y, 'fx_ring').setDepth(87).setAlpha(0.8);
+    this.tweens.add({ targets: img, alpha: 0, scale: 1.6, duration: 300, onComplete: () => img.destroy() });
   }
-  fxMelee() {}
+  fxMelee(x, y, heavy) { this.onMeleeImpact(x, y, heavy); }
   onMeleeImpact(x, y, heavy) {
     this.spawnBurst(x, y, heavy ? 'fx_slash3' : 'fx_hitflash');
   }
@@ -1144,19 +1334,21 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
   spawnBurst(x, y, tex) {
-    this.add.image(x, y, tex).setDepth(86).setBlendMode('ADD').setAlpha(0.75);
+    const img = this.add.image(x, y, tex).setDepth(86).setBlendMode('ADD').setAlpha(0.75);
+    this.tweens.add({ targets: img, alpha: 0, scale: 1.25, duration: 220, onComplete: () => img.destroy() });
   }
   grantWarmth(sec) {
     this.env.grantWarmth(sec);
   }
 
-  /* ── Minimap rendering ──────────────────────────────────────────────── */
+  /* ── Minimap rendering (Phase D: session zoom, default 1×) ───────── */
   updateMinimap(px, py) {
     const canvas = document.getElementById('minimap-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const mw = canvas.width, mh = canvas.height;
-    const viewRadius = 2200;
+    const zoom = GameState.session.minimapZoom || 1;
+    const viewRadius = 2200 / zoom;
 
     ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, mw, mh);
@@ -1214,15 +1406,110 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   /* ── Share helpers to other systems ────────────────────────────────── */
-  kingdomPct() {
-    const owned = GameState.s.world.ownedCamps.length + (GameState.s.settlement.founded ? 1 : 0);
-    return Math.round((owned / 18) * 100);
-  }
-
   onEnemyDeath(e) {
+    if (e.boss && this.bossUI?._boss === e) this.bossUI.hide();
     if (!e.boss) return;
     // chain quest progress for boss kills
     import('../systems/QuestEngine.js').then((q) => q.handleEvent({ type: 'kill', boss: e.key }));
+  }
+
+  /**
+   * Phase D: raider siege AI. Raiders (`raider=true`, spawned by announced
+   * raid parties) march on the settlement and batter buildings — but only
+   * while the player stays away (within 260px the normal combat AI owns
+   * them, since Enemy.update already ran this frame).
+   */
+  enemyRaidTick(e, px, py, dt) {
+    if (!e.raider || e.dead || !e.sprite?.body) return;
+    const S = GameState.s;
+    if (!S.settlement?.founded) return;
+    const pd2 = (e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2;
+    if (pd2 < 260 * 260) return; // player engaged — normal AI handles it
+    e._raidHitCd = Math.max(0, (e._raidHitCd || 0) - dt);
+    // Nearest complete building.
+    let best = null, bestD2 = 170 * 170;
+    for (const b of S.settlement.buildings) {
+      if (!b.complete) continue;
+      const d2 = (b.x - e.sprite.x) ** 2 + (b.y - e.sprite.y) ** 2;
+      if (d2 < bestD2) { bestD2 = d2; best = b; }
+    }
+    if (!best) {
+      // No building in reach — march on the Town Hall.
+      const home = S.settlement.pos;
+      if (home && bestD2 > 60 * 60) {
+        const a = Math.atan2(home.y - e.sprite.y, home.x - e.sprite.x);
+        e.sprite.body.setVelocity(Math.cos(a) * e.atkSpd * 0.8, Math.sin(a) * e.atkSpd * 0.8);
+      }
+      return;
+    }
+    if (bestD2 > 60 * 60) {
+      const a = Math.atan2(best.y - e.sprite.y, best.x - e.sprite.x);
+      e.sprite.body.setVelocity(Math.cos(a) * e.atkSpd, Math.sin(a) * e.atkSpd);
+      return;
+    }
+    e.sprite.body.setVelocity(0, 0);
+    if (e._raidHitCd > 0) return;
+    e._raidHitCd = 1.6;
+    const dmg = Math.max(2, Math.round(e.atk * 0.7));
+    best.hp = Math.max(0, (best.hp ?? 100) - dmg);
+    this.floats.add(best.x, best.y - 30, `-${dmg}`, '#ff9a7a', 1);
+    this.fxHit(best.x, best.y - 10);
+    Bus.emit('play-sound', 'build_thud');
+    if (best.hp <= 0) this.destroyBuilding(best);
+    else GameState.notify(CH.SETTLEMENT);
+  }
+
+  /** Phase D: a building reduced to 0 HP by raiders is destroyed. */
+  destroyBuilding(b) {
+    const S = GameState.s;
+    const def = getBuildingDef(b.key);
+    S.settlement.buildings = S.settlement.buildings.filter((x) => x.uid !== b.uid);
+    const img = this.buildings.get(b.uid);
+    if (img) { try { img.destroy(); } catch { /* already gone */ } this.buildings.delete(b.uid); }
+    this.spawnBurst(b.x, b.y, 'fx_ring');
+    this.spawnBurst(b.x, b.y, 'fx_hitflash');
+    GameState.toast({ title: `${def?.label || 'Building'} destroyed!`, msg: 'Raiders tore it down. Rebuild from the Build menu (B).', kind: 'danger', dur: 5200 });
+    if (b.key === 'townhall') {
+      S.settlement.founded = false;
+      GameState.toast({ title: 'YOUR HALL HAS FALLEN', msg: 'The realm scatters. Raise a new Town Hall to rally.', kind: 'danger', dur: 7000 });
+    }
+    GameState.notify(CH.SETTLEMENT, CH.WORLD);
+    try { this.refreshStationsNear(); } catch { /* optional */ }
+    try { kingdomRefresh(); } catch { /* optional */ }
+  }
+
+  /**
+   * Phase E: post-death cleanup. Teleports nearby non-boss enemies away and
+   * evades them so the player never respawns inside the pack that killed
+   * them. Bosses stay (arena fights are opt-in and positional).
+   */
+  resetNearbyEnemies(radius = 700) {
+    const px = this.player.sprite.x, py = this.player.sprite.y;
+    for (const e of this.enemies) {
+      if (e.dead || !e.sprite || e.boss) continue;
+      const d2 = (e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2;
+      if (d2 > radius * radius) continue;
+      const a = Math.atan2(e.sprite.y - py, e.sprite.x - px) + (Math.random() - 0.5);
+      e.sprite.setPosition(px + Math.cos(a) * (radius + 250), py + Math.sin(a) * (radius + 250));
+      e.shadow?.setPosition(e.sprite.x, e.sprite.y + 3);
+      e.evade();
+    }
+  }
+
+  /** Phase D: keep the boss bar HP live; hide when the fight is abandoned. */
+  refreshBossBar(px, py) {
+    const b = this.bossUI?._boss;
+    if (!b || !GameState.session.activeBoss) return;
+    if (b.dead || !b.sprite) { this.bossUI.hide(); return; }
+    const d2 = (b.sprite.x - px) ** 2 + (b.sprite.y - py) ** 2;
+    const leash = (b.radius || 520) + 300;
+    if (d2 > leash * leash) { this.bossUI.hide(); return; }
+    const ab = GameState.session.activeBoss;
+    const hp = Math.max(0, Math.ceil(b.hp));
+    if (ab.hp !== hp) {
+      ab.hp = hp;
+      GameState.notify(CH.BOSSBAR);
+    }
   }
 
   refreshSurvivalHud() {
@@ -1232,7 +1519,6 @@ export default class WorldScene extends Phaser.Scene {
 
 /* ══════════════════ Module-level helpers ══════════════════ */
 
-const GATHER_CONFIG_TICK_XP = 2;
 function itemName_of(id) {
   return getItem(id)?.name || id;
 }

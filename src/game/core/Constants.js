@@ -91,6 +91,7 @@ export const DIFFICULTY = Object.freeze({
 export const GATHER_CONFIG = {
   ticksPerNode: 3, // hits before node breaks
   tickTime: 0.55,
+  tickXp: 2, // XP per finished gather (Phase E: single source of truth)
   yieldBonusPerProfessionLevel: 0.07,
   toolTierSpeeds: [1, 1.25, 1.5, 1.8], // none/st iron/steel handled per tool def
   regrowTimeMin: 130,
@@ -126,7 +127,11 @@ export const MILITARY_CONFIG = {
   moraleFromHappiness: (h) => 0.7 + h / 166
 };
 
-export const TRADE_SPREAD = { buyMult: 1, sellMult: 0.38 };
+// Phase E balance: sellMult 0.38 → 0.45. The old spread (~2.6:1 against the
+// player before biome/faction mods) made merchant selling feel punishing
+// next to bandit gold drops (6–45) and market taxes; 0.45 keeps trading
+// profitable without out-earning combat loot or daily tariffs.
+export const TRADE_SPREAD = { buyMult: 1, sellMult: 0.45 };
 
 export const AUTOSAVE_INTERVAL_SEC = 100;
 

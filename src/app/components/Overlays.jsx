@@ -35,14 +35,50 @@ export function QuestTracker() {
   );
 }
 
+const MM_ZOOMS = [0.5, 1, 2, 4];
+
 export function Minimap() {
   const pos = useGameState([CH.PLAYER, CH.WORLD], () => ({
     x: GameState.s?.world?.px, y: GameState.s?.world?.py
   }));
+  const [zoom, setZoom] = React.useState(GameState.session.minimapZoom || 1);
+  const cycle = (dir) => {
+    const i = Math.max(0, MM_ZOOMS.indexOf(zoom) < 0 ? 1 : MM_ZOOMS.indexOf(zoom));
+    const next = MM_ZOOMS[Math.min(MM_ZOOMS.length - 1, Math.max(0, i + dir))];
+    setZoom(next);
+    GameState.session.minimapZoom = next;
+  };
   return (
     <div className="minimap">
       <div className="mm-tl">✦</div>
-      <canvas id="minimap-canvas" width="200" height="140" />
+      <div className="minimap-wrap">
+        <canvas id="minimap-canvas" width="200" height="140" />
+        <div className="mm-zoom">
+          <button onClick={() => cycle(-1)} title="Zoom out">−</button>
+          <button onClick={() => cycle(1)} title="Zoom in">+</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AchievementPopup() {
+  const ach = useGameState([CH.ACHIEVEMENTS], () => GameState.session.lastAchievement);
+  React.useEffect(() => {
+    if (!ach) return;
+    const t = setTimeout(() => {
+      if (GameState.session.lastAchievement?.id === ach.id) {
+        GameState.session.lastAchievement = null;
+        GameState.notify(CH.ACHIEVEMENTS);
+      }
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [ach?.id]);
+  if (!ach || Date.now() - (ach.at || 0) > 6000) return null;
+  return (
+    <div className="achieve-popup">
+      <b>🏆 {ach.name}</b>
+      <span>{ach.desc}</span>
     </div>
   );
 }

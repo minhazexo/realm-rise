@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import GameState from '../../game/core/GameState.js';
 import { CH } from '../../game/core/EventBus.js';
 import { randomSeed } from '../../utils/math.js';
+import { availableBoons } from '../../game/systems/LegacyStore.js';
 
 const SKINS = ['#caa27c', '#c69a72', '#b98a63', '#8d6a46', '#e0bb93', '#6b4a32'];
 const HAIR_COLORS = ['#4a3222', '#22150d', '#7c5632', '#d8b74a', '#8a3030', '#e5e0d2'];
@@ -21,6 +22,11 @@ export default function CharacterCreation() {
   const [hair, setHair] = useState(HAIR_STYLES[0]);
   const [hairColor, setHairColor] = useState(HAIR_COLORS[0]);
   const [personality, setPersonality] = useState('bold');
+  const [heirloom, setHeirloom] = useState(null);
+  // Phase E: NG+ heirloom boons unlocked by past victories on this browser.
+  const [boons] = useState(() => {
+    try { return availableBoons(); } catch { return []; }
+  });
   const diff = GameState.session.creationDifficulty || 'normal';
 
   const begin = () => {
@@ -30,6 +36,7 @@ export default function CharacterCreation() {
         name: name.trim() || 'Stranger',
         gender,
         personality,
+        heirloom,
         appearance: { skin, hairStyle: hair, hairColor, outfitTier: 0 }
       }, diff);
       GameState.session.screen = 'intro';
@@ -85,6 +92,21 @@ export default function CharacterCreation() {
             ))}
           </div>
         </div>
+        {boons.some((b) => b.open) && (
+          <div className="field">
+            <span>Heirloom (past victories)</span>
+            <div className="persona-col">
+              <button className={!heirloom ? 'persona on' : 'persona'} onClick={() => setHeirloom(null)}>
+                <b>None</b> — a fresh start.
+              </button>
+              {boons.filter((b) => b.open).map((b) => (
+                <button key={b.id} className={heirloom === b.id ? 'persona on' : 'persona'} onClick={() => setHeirloom(b.id)}>
+                  <b>{b.name}</b> — {b.desc}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="creation-actions">
           <button className="btn btn-menu" onClick={back}>BACK</button>
           <button className="btn btn-menu btn-gold" onClick={begin}>SURVIVE THE STORM</button>

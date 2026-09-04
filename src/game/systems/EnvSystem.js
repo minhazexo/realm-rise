@@ -6,7 +6,7 @@ import GameState from '../core/GameState.js';
 import { Bus } from '../core/EventBus.js';
 import { DAYNIGHT_CONFIG, WEATHER_CONFIG } from '../core/Constants.js';
 import { biomeAt } from '../world/worldGen.js';
-import { particleMultiplier, shadowsEnabled } from './SettingsSystem.js';
+import { particleMultiplier, shadowsEnabled, photosensitiveMode } from './SettingsSystem.js';
 import { throttleConfig } from './particleThrottle.js';
 import { setSkyColor, setSunPosition } from './WaterSystem.js';
 
@@ -139,16 +139,19 @@ export default class EnvSystem {
 
   lightningFlash() {
     const cam = this.scene.cameras.main;
-    // White flash overlay
-    const flash = this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0xffffff, 0.6)
-      .setOrigin(0).setScrollFactor(0).setDepth(4100).setBlendMode('ADD');
-    // Quick flash + fade
-    this.scene.tweens.add({
-      targets: flash, alpha: 0, duration: 180,
-      onComplete: () => flash.destroy()
-    });
-    // Camera shake
-    cam.shake(250, 0.006);
+    // Photosensitivity mode: thunder + soft rumble cue, no white strobe.
+    if (!photosensitiveMode()) {
+      // White flash overlay
+      const flash = this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0xffffff, 0.6)
+        .setOrigin(0).setScrollFactor(0).setDepth(4100).setBlendMode('ADD');
+      // Quick flash + fade
+      this.scene.tweens.add({
+        targets: flash, alpha: 0, duration: 180,
+        onComplete: () => flash.destroy()
+      });
+      // Camera shake
+      cam.shake(250, 0.006);
+    }
     // Thunder sound with delay
     setTimeout(() => Bus.emit('play-sound', 'thunder'), 200 + Math.random() * 600);
   }
@@ -235,9 +238,12 @@ export default class EnvSystem {
     const duskProx = 1 - Math.min(1, Math.abs(t - DUSK) / 0.08);
     const goldenHour = Math.max(0, dawnProx, duskProx);
 
-    // Night darkness — deeper and cooler
+    // Night darkness — deeper and cooler. When the NightLights mask is
+    // active it carries the darkness (with light holes), so the flat layer
+    // drops to a 0.25 residual instead of double-darkening the scene.
     this.darkLayer.setFillStyle(0x080e1a);
-    this.darkLayer.setAlpha(Math.max(0, 0.88 - smoothDay * 0.88));
+    const flatDark = Math.max(0, 0.88 - smoothDay * 0.88);
+    this.darkLayer.setAlpha(this.useLightMask ? Math.min(flatDark, 0.25) : flatDark);
 
     // Golden-hour color grade
     if (this.gradeLayer) {
@@ -307,6 +313,30 @@ export default class EnvSystem {
       this.fireflyEmitter = null;
     }
 
+    // Phase B: world-space rain splashes — the screen-space streaks read
+    // as overlay; splashes on the ground around the player anchor weather
+    // in the world. Throttled, particle-setting aware.
+    if ((this.weather === 'drizzle' || this.weather === 'storm') && particleMultiplier() > 0) {
+      this._splashAcc = (this._splashAcc || 0) + dt;
+      if (this._splashAcc > 0.4) {
+        this._splashAcc = 0;
+        try {
+          const p = this.scene.player?.sprite;
+          const mult = particleMultiplier();
+          if (p && Math.random() < mult && this.scene.spawnBurst) {
+            const n = this.weather === 'storm' ? 3 : 1;
+            for (let i = 0; i < n; i++) {
+              this.scene.spawnBurst(
+                p.x + (Math.random() - 0.5) * 420,
+                p.y + (Math.random() - 0.5) * 300,
+                'pt_rain',
+              );
+            }
+          }
+        } catch { /* cosmetic */ }
+      }
+    }
+
     const biome = biomeAt(this.scene.player.sprite.x, this.scene.player.sprite.y);
     const w = this.weather;
     this.envContext = {
@@ -323,10 +353,11 @@ export default class EnvSystem {
       if (hpPct < 0.3) {
         // Pulse intensity: stronger the lower HP gets, with a breathing effect.
         // Halve the breathing when the user prefers reduced motion so the
-        // vignette still warns but doesn't strobe.
+        // vignette still warns but doesn't strobe. Static in photosensitivity
+        // mode — no oscillation at all.
         const danger = (0.3 - hpPct) / 0.3; // 0 at 30% HP, 1 at 0% HP
         const reduced = S.settings?.toggles?.reducedMotion === true;
-        const pulse = reduced ? 0.65 : 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
+        const pulse = photosensitiveMode() ? 0.6 : reduced ? 0.65 : 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
         this.dangerVignette.setAlpha(danger * (0.45 + pulse * 0.25));
       } else {
         this.dangerVignette.setAlpha(0);

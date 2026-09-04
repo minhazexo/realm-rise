@@ -18,6 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.js';
 import { Bus } from '../core/EventBus.js';
+import { photosensitiveMode } from './SettingsSystem.js';
 
 const QUALITY_ORDER = ['low', 'med', 'high', 'ultra'];
 const QUALITY_NUM = { low: 0, med: 1, high: 2, ultra: 3 };
@@ -72,8 +73,9 @@ export default class PostFXSystem {
     }
 
     // Conditional: bloom from medium up. Bloom is what makes emissive
-    // objects (torches, sun, fireballs, projectiles) glow.
-    if (qNum() >= 1) {
+    // objects (torches, sun, fireballs, projectiles) glow. Skipped in
+    // photosensitivity mode (bloom strobing on bright flashes).
+    if (qNum() >= 1 && !photosensitiveMode()) {
       try {
         this.bloom = fx.addBloom(0xfff2c4, 0.55, 12, 0.6);
       } catch (err) {
@@ -83,7 +85,8 @@ export default class PostFXSystem {
 
     // Conditional: chromatic aberration on high/ultra. Subtle RGB split
     // that's strongest on screen edges, gives a cinematic/film feel.
-    if (qNum() >= 2) {
+    // Never in photosensitivity mode.
+    if (qNum() >= 2 && !photosensitiveMode()) {
       try {
         // Phaser exposes chromatic aberration via addChromaticAberration
         // in newer versions; fall back to nothing if not available.
@@ -104,6 +107,7 @@ export default class PostFXSystem {
    * gain for a satisfying screen-flash moment.
    */
   pulse(strength = 0.85, durMs = 120) {
+    if (photosensitiveMode()) return;
     if (!this.bloom || qNum() < 1) return;
     const now = performance.now();
     if (now - this.lastBloomKickedAt < 50) return; // throttle

@@ -160,15 +160,50 @@ export function getChunkCanvas(cx, cy) {
   const originY = cy * size;
   const biome = BIOMES[biomeAt(originX + size / 2, originY + size / 2)] || BIOMES.plains;
 
-  // ── 1. Base gradient: subtle radial vignette for depth ───────────────
-  const grad = ctx.createRadialGradient(
-    size / 2, size / 2, size * 0.1,
-    size / 2, size / 2, size * 0.7,
-  );
-  grad.addColorStop(0, biome.grass);
-  grad.addColorStop(1, biome.grassDark);
-  ctx.fillStyle = grad;
+  // ── 1. Base: flat fill + large-scale macro variation ───────────────
+  // NOTE: the old radial vignette created a visible checkerboard when tiled.
+  // A flat base with soft large blobs breaks tiling and reads better at 1080p.
+  ctx.fillStyle = biome.grass;
   ctx.fillRect(0, 0, size, size);
+  // Macro variation: a few large soft blobs (deterministic) in grassDark/accent.
+  for (let i = 0; i < 7; i++) {
+    const mx = rand(originX + i * 101.3, originY + i * 57.7) * size;
+    const my = rand(originY + i * 131.7, originX + i * 43.1) * size;
+    const mr = 60 + rand(mx, my) * 70;
+    ctx.globalAlpha = 0.07 + rand(mx + 9, my + 3) * 0.05;
+    ctx.fillStyle = i % 2 === 0 ? biome.grassDark : biome.accent;
+    roundBlob(ctx, mx, my, mr);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── 1b. Biome edge blending (Phase B) ──────────────────────────────
+  // Sample 8 points on a ring around the chunk; where a neighbor differs,
+  // wash soft blobs of the neighbor's grass toward that edge. Cheap (8
+  // biomeAt calls) and kills hard 512px biome seams without per-pixel cost.
+  {
+    const centerId = biomeAt(originX + size / 2, originY + size / 2);
+    const ring = [
+      [0.5, -0.1, 0.5, 0.22], [0.5, 1.1, 0.5, 0.78],
+      [-0.1, 0.5, 0.22, 0.5], [1.1, 0.5, 0.78, 0.5],
+      [-0.1, -0.1, 0.2, 0.2], [1.1, -0.1, 0.8, 0.2],
+      [-0.1, 1.1, 0.2, 0.8], [1.1, 1.1, 0.8, 0.8],
+    ];
+    ring.forEach(([sx, sy, ex, ey], ri) => {
+      const nbId = biomeAt(originX + sx * size, originY + sy * size);
+      if (nbId === centerId || !BIOMES[nbId]) return;
+      const nb = BIOMES[nbId];
+      for (let k = 0; k < 3; k++) {
+        const jx = (rand(originX + ri * 17 + k * 31, originY + ri * 13) - 0.5) * 130;
+        const jy = (rand(originX + ri * 19, originY + ri * 23 + k * 37) - 0.5) * 130;
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = k % 2 === 0 ? nb.grass : nb.grassDark;
+        roundBlob(ctx, ex * size + jx, ey * size + jy, 55 + rand(jx, jy) * 45);
+        ctx.fill();
+      }
+    });
+    ctx.globalAlpha = 1;
+  }
 
   // ── 2. Moisture blotches (soft organic shapes) ───────────────────────
   for (let y = 0; y < size; y += BLOTCH_STEP) {
@@ -191,8 +226,9 @@ export function getChunkCanvas(cx, cy) {
   }
   ctx.globalAlpha = 1;
 
-  // ── 3. Fine-grain texture speckles + grass blades ──────────────────
-  const speckleCount = Math.floor(SPECKLE_SCALE * biome.decoDensity + SPECKLE_BASE);
+  // ── 3. Fine-grain texture speckles + grass blades + dirt + slope ──
+  // Doubled density vs before: old counts read as noise at 1080p.
+  const speckleCount = Math.floor(SPECKLE_SCALE * biome.decoDensity * 2 + SPECKLE_BASE * 2);
   for (let i = 0; i < speckleCount; i++) {
     const px = rand(originX + i * 13.7, originY + i * 7.3) * size;
     const py = rand(originY + i * 17.9, originX + i * 3.1) * size;
@@ -206,11 +242,11 @@ export function getChunkCanvas(cx, cy) {
     if (biome.snowy) {
       ctx.fillStyle = rand(px + 2, py + 2) > 0.5 ? '#f4f8fb' : '#e8eef5';
     } else if (biome.sandy) {
-      ctx.fillStyle = rand(px + 3, py + 3) > 0.5 ? biome.accent : shadeHex(biome.accent, 12);
+      ctx.fillStyle = rand(px + 3, py + 3) > 0.5 ? biome.accent : shadeHex(biome.accent, 0.9);
     } else if (biome.rocky) {
       ctx.fillStyle = i % 3 === 0 ? '#666b73' : biome.accent;
     } else if (biome.ashen) {
-      ctx.fillStyle = i % 4 === 0 ? '#d96b3c' : shadeHex(biome.grassDark, -8);
+      ctx.fillStyle = i % 4 === 0 ? '#d96b3c' : shadeHex(biome.grassDark, 0.92);
     } else {
       ctx.fillStyle = i % 5 === 0 ? biome.grassDark : biome.accent;
     }
@@ -243,16 +279,43 @@ export function getChunkCanvas(cx, cy) {
 
   // ── 3c. Pebble scatter (all biomes) ────────────────────────────────
   ctx.globalAlpha = 0.12;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 30; i++) {
     const px2 = rand(originX + i * 37.1, originY + i * 29.3) * size;
     const py2 = rand(originY + i * 41.7, originX + i * 13.9) * size;
     const e3 = elevationAt(originX + px2, originY + py2);
     if (isWaterAt(originX + px2, originY + py2) || e3 < RIVER_LEVEL - SHORE_EDGE) continue;
-    const pr = 1.2 + rand(px2 + 5, py2 + 5) * 1.8;
+    const pr = 1.2 + rand(px2 + 5, py2 + 5) * 2.4;
     ctx.fillStyle = biome.rocky ? '#6a6e76' : biome.sandy ? '#c4a880' : '#8a8878';
     ctx.beginPath();
     ctx.arc(px2, py2, pr, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── 3d. Dirt patches + slope shading ─────────────────────────────
+  // Dirt patches give close-zoom readability; slope shade fakes AO on hills.
+  for (let i = 0; i < 10; i++) {
+    const dxp = rand(originX + i * 53.7, originY + i * 91.2) * size;
+    const dyp = rand(originY + i * 67.3, originX + i * 29.8) * size;
+    if (isWaterAt(originX + dxp, originY + dyp)) continue;
+    ctx.globalAlpha = 0.1 + rand(dxp + 7, dyp + 7) * 0.08;
+    ctx.fillStyle = biome.sandy ? shadeHex(biome.grassDark, 1.05) : '#7a6a4f';
+    roundBlob(ctx, dxp, dyp, 8 + rand(dxp, dyp) * 16);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Slope: sample elevation gradient, darken downhill-facing texels subtly.
+  for (let i = 0; i < 40; i++) {
+    const sxp = rand(originX + i * 23.9, originY + i * 47.3) * size;
+    const syp = rand(originY + i * 31.1, originX + i * 17.7) * size;
+    const e0 = elevationAt(originX + sxp, originY + syp);
+    const ex = elevationAt(originX + sxp + 6, originY + syp);
+    const slope = Math.abs(ex - e0) * 40;
+    if (slope > 0.35 && !isWaterAt(originX + sxp, originY + syp)) {
+      ctx.globalAlpha = Math.min(0.16, slope * 0.12);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(sxp, syp, 3, 3);
+    }
   }
   ctx.globalAlpha = 1;
 
@@ -325,6 +388,23 @@ export function getChunkCanvas(cx, cy) {
             }
           }
         }
+      } else if (e >= waterThreshold && e < RIVER_LEVEL + 0.015) {
+        // ── 5b. Foam edge (Phase B): bright contour line where land meets
+        // water. Only where an actual water cell is adjacent (avoids speckle).
+        const adjWater =
+          elevationAt(wx + 8, wy) < waterThreshold ||
+          elevationAt(wx - 8, wy) < waterThreshold ||
+          elevationAt(wx, wy + 8) < waterThreshold ||
+          elevationAt(wx, wy - 8) < waterThreshold;
+        if (adjWater) {
+          ctx.globalAlpha = biome.murkyWater ? 0.22 : 0.38;
+          ctx.strokeStyle = biome.murkyWater ? 'rgba(200,190,140,0.9)' : 'rgba(255,255,255,0.9)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(x + 4, y + 4, 5.5, Math.PI * 0.9, Math.PI * 1.6);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
       }
     }
   }
@@ -354,6 +434,7 @@ export function getChunkCanvas(cx, cy) {
  */
 export function applyFogToChunk(canvas, dx, dy) {
   if (!canvas) return;
+  if (foggedForBucket.has(canvas)) return;
   const size = canvas.width;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -373,6 +454,7 @@ export function applyFogToChunk(canvas, dx, dy) {
   ctx.fillRect(0, 0, size, size);
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
+  foggedForBucket.add(canvas);
 }
 
 // Module-level toggle (the settings system drives this).
@@ -401,6 +483,8 @@ let _fogBiomeTints = {
   frozen:   '#c4d0db',
   volcanic: '#7e5a4a'
 };
+/** Tracks canvases already fogged for the current bucket (avoids double-darken). */
+const foggedForBucket = new WeakSet();
 export function setAtmosphereState({ timeOfDay, weather }) {
   if (typeof timeOfDay === 'number') _fogTimeOfDay = timeOfDay;
   if (weather) _fogWeather = weather;
@@ -409,7 +493,10 @@ export function setAtmosphereState({ timeOfDay, weather }) {
   if (bucket !== _fogSnapshot) {
     _fogSnapshot = bucket;
     _fogDirty = true;
-    cache.clear();   // invalidate so distant chunks re-bake with new fog
+    // NOTE: no longer cache.clear() — that caused a full rebake hitch every
+    // bucket change. New chunks pick up the new fog; existing chunks keep
+    // their baked fog until naturally evicted. Full day/night ground relight
+    // is Phase B (see docs/improvements/01_GRAPHICS_GROUND_VIEW.md).
   }
 }
 export function setFogBiomeTint(biomeId, color) {

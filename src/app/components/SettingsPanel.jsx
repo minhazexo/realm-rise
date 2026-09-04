@@ -10,20 +10,34 @@ import {
   resetSettings,
   SETTINGS_LIMITS,
   SETTINGS_DEFAULTS,
+  KEYBINDS_DEFAULT,
   lastApplied
 } from '../../game/systems/SettingsSystem.js';
 import { playSfx } from '../../game/systems/AudioSystem.js';
 
-const KEY_HINTS = [
-  { key: 'WASD / Arrows', desc: 'Move' },
-  { key: 'Shift', desc: 'Sprint' },
-  { key: 'Space', desc: 'Dodge' },
-  { key: 'LMB', desc: 'Attack (hold for heavy)' },
-  { key: 'RMB', desc: 'Block' },
-  { key: 'E', desc: 'Gather / interact' },
-  { key: 'I / C / B / M / J / K / P', desc: 'Inventory · Craft · Build · Map · Journal · Kingdom · Skills' },
-  { key: 'ESC', desc: 'Pause' }
-];
+const BIND_LABELS = {
+  up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right',
+  dodge: 'Dodge roll', sprint: 'Sprint',
+  gather: 'Gather / interact', inventory: 'Inventory', crafting: 'Crafting',
+  map: 'Map', journal: 'Journal', kingdom: 'Kingdom', build: 'Build mode',
+  skills: 'Skills', pause: 'Pause',
+};
+
+/** Map a KeyboardEvent to a Phaser KeyCodes name (null = unsupported). */
+function eventToCodeName(e) {
+  if (e.key === ' ') return 'SPACE';
+  if (typeof e.key === 'string' && e.key.startsWith('Arrow')) return e.key.slice(5).toUpperCase();
+  if (e.key && e.key.length === 1) {
+    const c = e.key.toUpperCase();
+    if (/^[A-Z]$/.test(c)) return c;
+    const digits = { 0: 'ZERO', 1: 'ONE', 2: 'TWO', 3: 'THREE', 4: 'FOUR', 5: 'FIVE', 6: 'SIX', 7: 'SEVEN', 8: 'EIGHT', 9: 'NINE' };
+    if (/^[0-9]$/.test(c)) return digits[c];
+    const sym = { ';': 'SEMICOLON', '=': 'EQUALS', ',': 'COMMA', '.': 'PERIOD', '/': 'FORWARD_SLASH', '\\': 'BACK_SLASH', "'": 'QUOTES', '[': 'OPEN_BRACKET', ']': 'CLOSED_BRACKET', '-': 'MINUS', '`': 'BACKTICK' };
+    return sym[e.key] || null;
+  }
+  const named = { Shift: 'SHIFT', Control: 'CTRL', Alt: 'ALT', Escape: 'ESC', Enter: 'ENTER', Tab: 'TAB', Backspace: 'BACKSPACE', Delete: 'DELETE', CapsLock: 'CAPS_LOCK', Insert: 'INSERT', Home: 'HOME', End: 'END', PageUp: 'PAGE_UP', PageDown: 'PAGE_DOWN' };
+  return named[e.key] || null;
+}
 
 export default function SettingsPanel({ onBack }) {
   // Read the canonical "last applied" settings snapshot. This works whether
@@ -98,6 +112,26 @@ export default function SettingsPanel({ onBack }) {
         </Row>
         <Toggle label="Shadows" hint="Ground shadow ellipses under entities." checked={s.shadows !== false} onChange={(v) => onScalar('shadows', v)} />
         <Toggle label="Distance fog" hint="Faraway terrain fades into the horizon. Disable on slow hardware." checked={s.distanceFog !== false} onChange={(v) => onScalar('distanceFog', v)} />
+        <Row label="FPS cap" hint="Lower to 30 on weak hardware or hot laptops. Auto = display default.">
+          <PillSelect
+            value={s.fpsCap ?? 0}
+            options={SETTINGS_LIMITS.fpsCap.allowed}
+            onChange={(v) => onScalar('fpsCap', v)}
+            labels={{ 0: 'Auto', 30: '30', 60: '60', 120: '120' }}
+          />
+        </Row>
+        <Row label="Fullscreen" hint="Immersive borderless play. ESC exits (browser).">
+          <button
+            type="button"
+            className="btn btn-small btn-ghost"
+            onClick={() => {
+              try {
+                if (document.fullscreenElement) document.exitFullscreen?.();
+                else document.documentElement.requestFullscreen?.();
+              } catch { /* unsupported */ }
+            }}
+          >Toggle fullscreen</button>
+        </Row>
         <Row label="UI scale" hint="Zoom the entire game UI.">
           <Slider
             value={s.uiScale}
@@ -114,6 +148,7 @@ export default function SettingsPanel({ onBack }) {
       <Section title="Accessibility" hint="Make the game easier on the eyes and brain.">
         <Toggle label="Reduced motion" hint="Disables camera shake and slow pulses." checked={s.toggles.reducedMotion === true} onChange={(v) => onT('reducedMotion', v)} />
         <Toggle label="Screen shake" hint="Hit / damage camera shake." checked={s.toggles.screenShake !== false} onChange={(v) => onT('screenShake', v)} />
+        <Toggle label="Photosensitivity-safe" hint="No fullscreen flashes, bloom pulses, chromatic aberration or shake." checked={s.toggles.photosensitive === true} onChange={(v) => onT('photosensitive', v)} />
         <Toggle label="Damage numbers" hint="Float damage values when hitting enemies." checked={s.toggles.damageNumbers !== false} onChange={(v) => onT('damageNumbers', v)} />
         <Toggle label="HP bars above enemies" hint="Always-on enemy HP bars instead of hover-only." checked={s.toggles.hpBarsAbove !== false} onChange={(v) => onT('hpBarsAbove', v)} />
         <Toggle label="Colorblind-friendly HUD" hint="Uses higher-contrast shapes & icons for status." checked={s.toggles.colorblindHints === true} onChange={(v) => onT('colorblindHints', v)} />
@@ -168,7 +203,7 @@ export default function SettingsPanel({ onBack }) {
       </Section>
 
       {/* ── Controls ───────────────────────────────────────────────────── */}
-      <Section title="Controls" hint="Choose your preferred primary key set. Both sets always work.">
+      <Section title="Controls" hint="WASD + arrows always move. Click a binding, then press a key.">
         <Row label="Movement keys" hint="Highlighted in the on-screen hints.">
           <PillSelect
             value={s.movementScheme}
@@ -177,24 +212,54 @@ export default function SettingsPanel({ onBack }) {
             labels={{ wasd: 'WASD', arrows: 'Arrows' }}
           />
         </Row>
-        <div className="settings-keybinds">
-          <div className="settings-keybinds-title">
-            Key bindings <em>(read-only — remapping coming soon)</em>
-          </div>
-          <ul>
-            {KEY_HINTS.map((b) => (
-              <li key={b.key}>
-                <kbd>{b.key}</kbd>
-                <span>{b.desc}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <KeybindList binds={s.keybinds || {}} />
       </Section>
 
       {onBack && (
         <button className="btn btn-menu btn-small settings-back" onClick={onBack}>BACK</button>
       )}
+    </div>
+  );
+}
+
+/* ── Key rebinding (Phase E) ─────────────────────────────────────────── */
+
+function KeybindList({ binds }) {
+  const [capturing, setCapturing] = React.useState(null); // action being rebound
+  React.useEffect(() => {
+    if (!capturing) return;
+    const onKey = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = eventToCodeName(e);
+      if (code) updateSettings({ keybinds: { [capturing]: code } });
+      setCapturing(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [capturing]);
+  const reset = () => updateSettings({ keybinds: { ...KEYBINDS_DEFAULT } });
+  return (
+    <div className="settings-keybinds">
+      <div className="settings-keybinds-title">
+        Key bindings
+        <button type="button" className="btn btn-small btn-ghost" onClick={reset}>Reset keys</button>
+      </div>
+      <ul>
+        {Object.keys(BIND_LABELS).map((action) => (
+          <li key={action}>
+            <span>{BIND_LABELS[action]}</span>
+            <button
+              type="button"
+              className={`keybind-cap ${capturing === action ? 'capturing' : ''}`}
+              onClick={() => setCapturing(action)}
+            >
+              <kbd>{capturing === action ? 'press key…' : (binds[action] || KEYBINDS_DEFAULT[action])}</kbd>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <em className="setting-row-hint">Mouse: LMB attack (hold = heavy) · RMB block.</em>
     </div>
   );
 }

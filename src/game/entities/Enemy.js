@@ -6,6 +6,7 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.js';
 import { Bus } from '../core/EventBus.js';
+import { shakeAllowed } from '../systems/SettingsSystem.js';
 import { DIFFICULTY } from '../core/Constants.js';
 import { getEnemyDef } from '../data/enemies.js';
 import { awardXP, profXP } from '../systems/ProgressionSystem.js';
@@ -52,6 +53,9 @@ export default class Enemy {
     this.walkPhase = 0;
     this._walkTimer = 0;
     this.moveCd = {};
+    // Phase B role cooldowns (charger dash, pounce leap).
+    this.chargeCd = 0;
+    this.pounceCd = 0;
     this._hpBarTimer = 0;
     this._hpBarAlpha = 0;
     this._hpBarW = this.boss ? 56 : (isQuad ? 44 : 34);
@@ -142,10 +146,63 @@ update(dt, ctx) {
         break;
       case STATE.DETECT:
         this.stateTimer -= dt;
+        this.faceTarget(p.sprite);
         this.sprite.setTint(0xffd08a);
-        if (this.stateTimer <= 0) { this.state = STATE.CHASE; this.sprite.clearTint(); }
+        if (d > detect * 1.5 && !this.boss) { this.state = STATE.IDLE; this.sprite.clearTint(); break; }
+        if (this.stateTimer <= 0) { this.state = STATE.CHASE; this.sprite.setTint(0xff9a6a); }
         break;
-      case STATE.CHASE:
+      case STATE.CHASE: {
+        this.chargeCd = Math.max(0, (this.chargeCd || 0) - dt);
+        this.pounceCd = Math.max(0, (this.pounceCd || 0) - dt);
+        const style = this.def.style;
+        const pref = this.def.preferredRange;
+        // Kiter / archer: hold preferred range instead of face-hugging.
+        if ((style === 'kiter' || this.def.ranged) && pref) {
+          if (d < pref - 40) this.moveAway(p.sprite.x, p.sprite.y, this.atkSpd, dt);
+          else if (d > pref + 60) this.moveToward(p.sprite.x, p.sprite.y, this.atkSpd, dt);
+          else {
+            // Strafe slowly to stay evasive at range.
+            const ang = Math.atan2(this.sprite.y - p.sprite.y, this.sprite.x - p.sprite.x) + Math.PI / 2;
+            this.sprite.body?.setVelocity(Math.cos(ang) * this.atkSpd * 0.4, Math.sin(ang) * this.atkSpd * 0.4);
+          }
+          this.faceTarget(p.sprite);
+          if (d < this.def.attackRange) this.tryAttack(p);
+          if (d > detect * 2.6 && !this.boss) { this.state = STATE.SEARCH; this.stateTimer = 4; }
+          break;
+        }
+        // Charger (boar): telegraphed dash when in range.
+        if (style === 'charger' && this.chargeCd <= 0 && d < (this.def.chargeDist || 260) && d > this.def.attackRange * 1.5) {
+          this.chargeCd = 3;
+          this.sprite.setTint(0xff4444);
+          this.sprite.body?.setVelocity(0, 0);
+          const tx = p.sprite.x, ty = p.sprite.y;
+          Bus.emit('play-sound', 'wolf_growl');
+          this.scene.time.delayedCall(400, () => {
+            if (this.dead) return;
+            this.sprite.clearTint();
+            const a = Math.atan2(ty - this.sprite.y, tx - this.sprite.x);
+            const mult = this.def.chargeSpeedMult || 2;
+            this.sprite.body?.setVelocity(Math.cos(a) * this.atkSpd * mult, Math.sin(a) * this.atkSpd * mult);
+            this.scene.time.delayedCall(350, () => {
+              if (this.dead || !this.sprite.body) return;
+              const dd = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
+              if (dd < this.def.attackRange + 18) p.takeDamage(this.atk * 1.1, this.sprite.x, this.sprite.y);
+            });
+          });
+          break;
+        }
+        // Pounce (wolf/dire): leap onto the player from mid range.
+        if (style === 'pounce' && this.pounceCd <= 0 && d < (this.def.pounceRange || 200) && d > this.def.attackRange * 1.3) {
+          this.pounceCd = 2.5;
+          const tx = p.sprite.x, ty = p.sprite.y;
+          this.scene.tweens.add({ targets: this.sprite, x: tx, y: ty, duration: 320, ease: 'Quad.out' });
+          this.scene.time.delayedCall(300, () => {
+            if (this.dead) return;
+            const dd = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
+            if (dd < this.def.attackRange + 14) p.takeDamage(this.atk, this.sprite.x, this.sprite.y);
+          });
+          break;
+        }
         if (d > this.def.attackRange * 0.85) {
           this.sprite.setTint(0xff9a6a);
           this.moveToward(p.sprite.x, p.sprite.y, this.atkSpd, dt);
@@ -153,6 +210,7 @@ update(dt, ctx) {
         this.faceTarget(p.sprite);
         if (d > detect * 2.6 && !this.boss) { this.state = STATE.SEARCH; this.stateTimer = 4; }
         break;
+      }
       case STATE.ATTACK:
         this.faceTarget(p.sprite);
         if (d > this.def.attackRange * 1.25) { this.state = STATE.CHASE; break; }
@@ -190,9 +248,35 @@ update(dt, ctx) {
     if (this._hpBarAlpha > 0) this.refreshHealthBar();
   }
 
+  /**
+   * Phase E evade: leash-reset for respawn/raid cleanup. Non-bosses only —
+   * arena bosses never evade. Restores full HP (WoW-style evade), drops
+   * aggro, stops movement. No loot, no XP.
+   */
+  evade() {
+    if (this.dead || this.boss) return false;
+    this.hp = this.maxHp;
+    this.state = STATE.IDLE;
+    this.stateTimer = 2 + Math.random() * 2;
+    this.attackCd = 1;
+    this.windingUp = false;
+    this.chargeCd = 0;
+    this.pounceCd = 0;
+    this.sprite.body?.setVelocity(0, 0);
+    this.sprite.clearTint();
+    this._hpBarAlpha = 0;
+    this.hpBar?.setVisible(false);
+    return true;
+  }
+
   enterChase() {
-    this.state = STATE.CHASE;
-    this.sprite.setTint(0xff9a6a);
+    // Phase B: DETECT telegraph — 0.35s "!" warning before the chase, so
+    // aggro never feels instant (Lane-1 readability).
+    if (this.state === STATE.DETECT || this.state === STATE.CHASE) return;
+    this.state = STATE.DETECT;
+    this.stateTimer = 0.35;
+    this.sprite.setTint(0xffd08a);
+    try { this.scene.floats?.add(this.sprite.x, this.sprite.y - 30, '!', '#ffd66b', 1.1); } catch { /* cosmetic */ }
   }
 
   faceTarget(t) {
@@ -228,12 +312,22 @@ update(dt, ctx) {
     this.attackCd = def.attackCd;
     this.windingUp = true;
     Bus.emit('play-sound', 'sword');
+    // Brute slam: bigger windup payoff as a small AoE ring with telegraph.
+    const isBrute = def.style === 'brute' || def.aoeSlam;
     this.scene.time.delayedCall((def.windupSec || 0.4) * 1000, () => {
       if (this.dead) return;
       this.windingUp = false;
       const dmg = this.atk * (0.85 + Math.random() * 0.25);
       const dNow = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
       const effRange = def.ranged ? def.attackRange : def.attackRange + def.radius * 0.5;
+      if (isBrute) {
+        const slamR = (def.slamRadius || 70) + 30;
+        this.scene.spawnBurst?.(this.sprite.x, this.sprite.y, 'fx_ring');
+        if (shakeAllowed()) this.scene.cameras.main.shake(120, 0.004);
+        if (dNow > slamR) return;
+        p.takeDamage(dmg * 1.1, this.sprite.x, this.sprite.y);
+        return;
+      }
       if (dNow > effRange) return;
       if (def.ranged) {
         this.scene.spawnProjectile({

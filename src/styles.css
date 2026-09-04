@@ -480,6 +480,50 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 .recipe-cost .need { color: var(--blood); font-size: 10px; }
 .locked-reason { font-size: 10px; color: var(--blood); font-style: normal; }
 .craft-btn { font-size: 16px; }
+.craft-time { font-size: 10px; color: var(--parch-dim); }
+.compare-line { font-size: 10px; color: var(--parch-dim); display: block; margin-top: 2px; }
+.compare-line .have { color: var(--emerald); }
+.compare-line .need { color: var(--blood); }
+.craft-queue { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 8px;
+  background: rgba(36,29,23,0.6); border: 1px solid var(--gold-dim); border-radius: 6px; font-size: 12px; }
+.craft-queue-bar { flex: 1; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; }
+.craft-queue-bar > div { height: 100%; background: var(--gold); transition: width 80ms linear; }
+.craft-cancel { padding: 3px 10px; background: rgba(160,40,35,0.6); border: 1px solid var(--blood);
+  border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer; font-family: inherit; }
+.salvage-btn { position: absolute; bottom: 1px; right: 2px; font-size: 11px; opacity: 0.55; cursor: pointer; }
+.cell:hover .salvage-btn { opacity: 1; }
+.salvage-btn:hover { transform: scale(1.25); }
+
+/* ── Phase D panels: map / journal / trade / pause / save ─────────────── */
+.map-stats { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; margin-bottom: 8px; }
+.poi-list { display: flex; flex-direction: column; gap: 3px; max-height: 150px; overflow-y: auto; margin-bottom: 8px; }
+.poi-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 6px;
+  background: rgba(36,29,23,0.4); border-radius: 4px; }
+.mm-legend { display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: var(--parch-dim); }
+.mm-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
+.minimap-wrap { position: relative; }
+.mm-zoom { position: absolute; bottom: 2px; right: 2px; display: flex; gap: 2px; }
+.mm-zoom button { width: 18px; height: 18px; font-size: 11px; line-height: 1; padding: 0;
+  background: rgba(20,28,38,0.85); border: 1px solid rgba(180,150,80,0.35); color: var(--parch);
+  border-radius: 4px; cursor: pointer; }
+.quest-main { margin-bottom: 10px; font-size: 12px; }
+.quest-main ul { margin: 4px 0 0 16px; padding: 0; }
+.quest-main li.done { color: var(--emerald); }
+.pause-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.save-row { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 6px 8px; background: rgba(36,29,23,0.4); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.save-actions { display: flex; gap: 4px; }
+.save-actions button { padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: inherit;
+  background: rgba(36,29,23,0.6); border: 1px solid rgba(180,150,80,0.35); color: var(--parch); border-radius: 4px; }
+.save-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+.import-row { display: block; font-size: 11px; margin-top: 8px; }
+.achieve-popup { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); z-index: 60;
+  background: linear-gradient(180deg, rgba(46,36,18,0.97), rgba(28,22,12,0.97));
+  border: 1px solid var(--gold); border-radius: 10px; padding: 10px 22px; text-align: center;
+  animation: achPop 0.35s ease-out; pointer-events: none; max-width: 80vw; }
+.achieve-popup b { color: var(--gold); font-size: 14px; letter-spacing: 1px; }
+.achieve-popup span { display: block; font-size: 11px; color: var(--parch); margin-top: 2px; }
+@keyframes achPop { from { transform: translateX(-50%) scale(0.85); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 
 /* ── Skills panel ─────────────────────────────────────────────────────── */
 .skill-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
@@ -598,8 +642,7 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 
 /* Same fix for overlays mounted directly under .app-root (in-world). */
 .app-root > .panel { pointer-events: auto; }
-   Uses CSS custom properties set by SettingsSystem (--ui-scale, --text-scale).
-   ───────────────────────────────────────────────────────────────────────── */
+/* Panels use CSS custom properties set by SettingsSystem (--ui-scale, --text-scale). */
 
 /* Apply UI scale uniformly across the whole game UI (panel, hud, menus). */
 #root {
@@ -886,7 +929,11 @@ html[data-reduced-motion="1"] *::after {
   opacity: 0.7;
 }
 .settings-keybinds ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.settings-keybinds li { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--parch-dim); }
+.settings-keybinds li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--parch-dim); }
+.settings-keybinds-title { display: flex; justify-content: space-between; align-items: center; }
+.keybind-cap { background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+.keybind-cap kbd { cursor: pointer; }
+.keybind-cap.capturing kbd { border-color: var(--gold); color: var(--gold); animation: achPop 0.3s ease-out; }
 .settings-keybinds kbd {
   display: inline-block;
   min-width: 60px;

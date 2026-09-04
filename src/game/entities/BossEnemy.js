@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.js';
 import { Bus } from '../core/EventBus.js';
+import { photosensitiveMode, shakeAllowed } from '../systems/SettingsSystem.js';
 import Enemy from './Enemy.js';
 
 export default class BossEnemy extends Enemy {
@@ -33,7 +34,8 @@ export default class BossEnemy extends Enemy {
       if (ph?.enrageSpeed) this.atkSpd *= ph.enrageSpeed;
       if (ph?.summon) this.summon(ph.summon.type, ph.summon.count);
       this.scene.bossUI?.setPhase(idx + 1);
-      this.scene.cameras.main.flash(300, 255, 120, 40);
+      // Fullscreen phase flash — skipped in photosensitivity mode.
+      if (!photosensitiveMode()) this.scene.cameras.main.flash(300, 255, 120, 40);
     }
     this.lastPhaseHpPct = pct;
 
@@ -48,15 +50,24 @@ export default class BossEnemy extends Enemy {
     this.faceTarget(p.sprite);
     this.syncAnim(dt);
 
-    // movement-cooldown driven attack selection
+    // movement-cooldown driven attack selection — try moves in shuffled
+    // order so a single on-cd move (e.g. howl_summon) never stalls the boss.
     const phase = phases[this.phaseIndex] || phases[0] || { moves: ['swipe'] };
-    const moveName = phase.moves[Math.floor(Math.random() * phase.moves.length)];
-    this.runMove(moveName, p, d);
+    const candidates = [...(phase.moves || ['swipe'])];
+    if (!candidates.includes('swipe')) candidates.push('swipe'); // fallback basic
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    for (const moveName of candidates) {
+      if (this.runMove(moveName, p, d)) break;
+    }
   }
 
+  /** Run a boss move. Returns true when the move executed (was off cooldown). */
   runMove(name, p, d) {
     const cd = this.tickCd(name);
-    if (cd > 0) return;
+    if (cd > 0) return false;
     const setCd = (s) => { this.moveCds[name] = s; };
 
     switch (name) {
@@ -70,14 +81,30 @@ export default class BossEnemy extends Enemy {
         break;
       }
       case 'swipe':
+        if (d > this.def.attackRange + 30) { setCd(0.3); return false; }
         setCd(this.def.attackCd);
         this.scene.time.delayedCall(280, () => { if (!this.dead) this.hitPlayer(p, 0.9); });
         break;
       case 'howl_summon':
         setCd(9);
         this.summon('wolf', 2);
-        this.scene.cameras.main.shake(200, 0.004);
+        if (shakeAllowed()) this.scene.cameras.main.shake(200, 0.004);
         break;
+      case 'beam_sweep': {
+        // Ancient Guardian sweeping beam: telegraphed wide-arc zap.
+        setCd(5);
+        this.sprite.setTint(0x7be0c3);
+        Bus.emit('play-sound', 'boss_roar');
+        this.scene.spawnBurst?.(this.sprite.x, this.sprite.y, 'fx_ring');
+        this.scene.time.delayedCall(500, () => {
+          if (this.dead) return;
+          this.sprite.clearTint();
+          const dd = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
+          if (dd < 300) this.hitPlayer(p, 1.2);
+          this.scene.spawnBurst?.(p.sprite.x, p.sprite.y, 'fx_hitflash');
+        });
+        break;
+      }
       case 'slam': {
         setCd(3.2);
         this.scene.fxSlam?.(this.sprite.x, this.sprite.y, this.def.slamRadius || 86);
@@ -126,6 +153,7 @@ export default class BossEnemy extends Enemy {
         setCd(0.5);
         break;
     }
+    return true;
   }
 
   tickCd(name) {
@@ -135,7 +163,7 @@ export default class BossEnemy extends Enemy {
 
   hitPlayer(p, mult) {
     p.takeDamage(this.atk * mult, this.sprite.x, this.sprite.y);
-    this.scene.cameras.main.shake(120, 0.006);
+    if (shakeAllowed()) this.scene.cameras.main.shake(120, 0.006);
   }
 
   summon(type, count) {

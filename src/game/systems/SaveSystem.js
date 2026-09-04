@@ -121,6 +121,34 @@ export function deleteSlot(slotId) {
   }
 }
 
+/** Export a slot as a JSON string for download (Phase D save sharing). */
+export function exportSlot(slotId = 'auto') {
+  try {
+    const raw = localStorage.getItem(keyFor(slotId));
+    if (!raw) return { ok: false, msg: 'Slot is empty' };
+    JSON.parse(raw); // validate before handing out
+    return { ok: true, json: raw };
+  } catch {
+    return { ok: false, msg: 'Save is corrupted' };
+  }
+}
+
+/**
+ * Import a JSON save string into a target slot. Validates shape the same
+ * way loadFromSlot does; never touches existing slots on failure.
+ */
+export function importSlotData(jsonStr, targetSlot = 'slot1') {
+  if (!SLOT_IDS.includes(targetSlot)) return { ok: false, msg: 'Bad slot' };
+  try {
+    const data = JSON.parse(jsonStr);
+    if (!data?.player?.level || !data?.meta?.seed) return { ok: false, msg: 'Not a Rise of the Realm save' };
+    localStorage.setItem(keyFor(targetSlot), JSON.stringify(data));
+    return { ok: true, slot: targetSlot };
+  } catch {
+    return { ok: false, msg: 'Invalid save file' };
+  }
+}
+
 export function storageAvailable() {
   try {
     const k = `${PREFIX}probe`;

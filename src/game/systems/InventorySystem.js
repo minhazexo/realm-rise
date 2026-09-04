@@ -136,8 +136,16 @@ export const equippedDef = (slot) => {
 export const equippedDur = (slot) => st().player.equipment[slot]?.dur ?? null;
 
 /* ── Durability wear & repair ──────────────────────────────────────────── */
+// kind: 'weapon' (attack swing), 'armor' (taking damage), 'offhand' (blocking),
+// or 'all'. Armor wears slower — callers pass fractional amounts; we round to ≥1
+// only when accumulated damage justifies it (amount is pre-scaled by caller).
 export function wearEquipped(kind = 'weapon', amount = 1, toolWearMult = 1) {
-  const slots = kind === 'weapon' ? ['weapon'] : [];
+  const slots =
+    kind === 'weapon' ? ['weapon']
+    : kind === 'armor' ? ['helmet', 'chest', 'gloves', 'boots']
+    : kind === 'offhand' ? ['offhand']
+    : kind === 'all' ? ['weapon', 'offhand', 'helmet', 'chest', 'gloves', 'boots']
+    : [];
   let brokeSomething = false;
   for (const slot of slots) {
     const eq = st().player.equipment[slot];

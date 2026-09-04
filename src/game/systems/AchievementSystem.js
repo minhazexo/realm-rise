@@ -53,6 +53,8 @@ export function evaluateAll() {
         added = true;
         GameState.toast({ title: `ACHIEVEMENT · ${a.name}`, msg: a.desc, kind: 'achievement', dur: 5200 });
         GameState.s.achievements[a.id] = Date.now();
+        // Phase D: visual center-screen popup (in addition to the toast).
+        GameState.session.lastAchievement = { id: a.id, name: a.name, desc: a.desc, at: Date.now() };
       }
     } catch {
       /* achievements must never crash gameplay */

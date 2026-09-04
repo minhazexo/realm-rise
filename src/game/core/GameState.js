@@ -6,6 +6,7 @@
 import { createStateDefaults, STARTER_KIT } from './stateFactory.js';
 import { CH, Bus } from './EventBus.js';
 import { getItem } from '../data/items.js';
+import { applyBoon } from '../systems/LegacyStore.js';
 
 class GameStore {
   constructor() {
@@ -46,6 +47,11 @@ class GameStore {
     // Personality micro-identity bonuses (spec §7 — different paths feel different).
     const pBumps = { bold: { strength: 1 }, stoic: { defense: 1 }, kind: { willpower: 1 }, clever: { intellect: 1 } };
     Object.assign(st.player.alloc, pBumps[st.player.personality] || {});
+    // Phase E: NG+ heirloom boon from a completed run (validated inside
+    // applyBoon — locked/unknown ids are ignored, never crash newGame).
+    if (charOpts.heirloom) {
+      try { applyBoon(st, charOpts.heirloom); } catch { /* no boon */ }
+    }
     return st;
   }
 

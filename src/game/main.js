@@ -9,7 +9,15 @@ import { initAudio, installAudioBus, playSfx, applyVolumes } from './systems/Aud
 import { installBridge } from './core/BridgeSystem.js';
 import { recompute } from './systems/ProgressionSystem.js';
 import { refresh as kingdomRefresh } from './systems/KingdomSystem.js';
-import { installSettingsSystem, applySettings, withPrefs, clearMenuCache } from './systems/SettingsSystem.js';
+import { installSettingsSystem, applySettings, withPrefs, clearMenuCache, currentSettings } from './systems/SettingsSystem.js';
+
+/** Phase E: apply the FPS cap to Phaser's loop (0 = display default 60). */
+export function applyFpsCap(settings) {
+  try {
+    const cap = settings?.fpsCap ?? 0;
+    if (game?.loop) game.loop.targetFps = cap > 0 ? cap : 60;
+  } catch { /* loop unavailable in tests */ }
+}
 
 export let game = null;
 export let currentSceneKey = 'MenuScene';
@@ -64,6 +72,8 @@ export function createGame(containerId = 'game-container') {
   // reducedMotion) even before a save is loaded.
   installSettingsSystem();
   applySettings(withPrefs(GameState.s?.settings), { busNotify: false });
+  applyFpsCap(currentSettings());
+  Bus.on('settings-applied', (s) => applyFpsCap(s));
   installBridge();
   Bus.on('play-sound', (name) => playSfx(name));
 
