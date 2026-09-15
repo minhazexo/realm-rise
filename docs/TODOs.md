@@ -12,6 +12,10 @@ None currently — all critical bugs have been fixed.
 
 | # | Issue | Location | Fix Effort |
 |---|-------|----------|------------|
+| 11 | **Build-card click doesn't engage placement mode reliably** — panel closes but no ghost/toast follows (verified identical on pre-extraction code, so pre-existing, not a migration regression). Direct `enterBuildMode` + handler-emitted pointer events found a settlement correctly end-to-end, so `BuildSystem` itself is sound; suspect React→canvas dispatch or synthetic-input delivery. Repro: B → click any build card → move mouse (expect green/red ghost). | `Panels.jsx` BuildPanel / `main.js` sceneCommand | Medium |
+
+| # | Issue | Location | Fix Effort |
+|---|-------|----------|------------|
 | 1 | ~~DebugPanel not toggleable~~ — ✅ Fixed: F3 key toggles, live data refresh | `DebugPanel.jsx` | Done |
 | 2 | **Panels.jsx item equip/unequip** — UI buttons exist but equip flow not tested end-to-end | `Panels.jsx` | Medium |
 | 3 | **DeathOverlay** — respawn works but doesn't properly restore enemy state after death | `DeathOverlay.jsx` | Medium |
@@ -32,7 +36,7 @@ None currently — all critical bugs have been fixed.
 | 3 | ~~NPC walking AI~~ | ✅ Done: 3-state wander AI with walk animation | Done |
 | 4 | ~~Building placement validation~~ | ✅ Done | Done |
 | 4 | ~~Building placement validation~~ | ✅ Done | Done |
-| 5 | Minimap legend | Color key showing biome meanings | Low |
+| 5 | ~~Minimap legend~~ — ✅ Done: collapsible icon + biome legend on minimap and world map | Done |
 | 6 | Inventory tooltips | Hover to see item stats/descriptions | Low |
 | 7 | Key binding customization | Let players rebind keys | Medium |
 | 8 | Video settings | Resolution, fullscreen, FPS cap | Medium |

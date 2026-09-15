@@ -1,6 +1,6 @@
 // Tests for SettingsSystem: defaults, normalisation, apply (DOM + bus),
 // reset, and the accessors used by other systems.
-import GameState from '../src/game/core/GameState.js';
+import GameState from '../src/game/core/GameState.ts';
 import {
   SETTINGS_DEFAULTS,
   SETTINGS_LIMITS,
@@ -17,8 +17,8 @@ import {
   currentSettings,
   clearMenuCache,
   isImmortal
-} from '../src/game/systems/SettingsSystem.js';
-import { SETTINGS_VERSION } from '../src/game/systems/SettingsSystem.js';
+} from '../src/game/systems/SettingsSystem.ts';
+import { SETTINGS_VERSION } from '../src/game/systems/SettingsSystem.ts';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } else console.log('✓ ' + m); };
@@ -137,8 +137,8 @@ clearMenuCache();
 const afterClear = withPrefs(GameState.s.settings);
 ok(afterClear.volumes.master === SETTINGS_DEFAULTS.volumes.master, 'clearing cache falls back to save defaults');
 
-console.log('— Immortal (test-only) —');
-ok(SETTINGS_DEFAULTS.immortal === false, 'immortal defaults to false');
+console.log('— Immortal (temporary god-mode) —');
+ok(SETTINGS_DEFAULTS.immortal === true, 'immortal defaults to true (temporary)');
 updateSettings({ immortal: true });
 ok(isImmortal() === true, 'isImmortal reflects the toggle');
 ok(GameState.s.settings.immortal === true, 'immortal persists on the live settings');
@@ -160,7 +160,7 @@ for (const k of allKeys) {
 GameState.s.player.hp = 5;
 GameState.s.session_dead = false;
 try {
-  const PlayerMod = await import('../src/game/entities/Player.js');
+  const PlayerMod = await import('../src/game/entities/Player.ts');
   // Build a minimal Player without invoking Phaser graphics — manually
   // patch the constructor output to avoid Phaser scene issues in node.
   const fakeScene = {
@@ -191,9 +191,23 @@ try {
   console.log('  (skipped die() tests — Phaser unavailable in node:', err.message, ')');
 }
 updateSettings({ immortal: false });
-ok(isImmortal() === false, 'isImmortal returns false when off');
+ok(isImmortal() === false, 'isImmortal returns false when toggled off');
 resetSettings();
-ok(isImmortal() === false, 'reset clears immortal');
+ok(isImmortal() === true, 'reset restores immortal default (temporary)');
+
+console.log('— Camera zoom —');
+ok(SETTINGS_DEFAULTS.camZoom === 1, 'camZoom defaults to 1');
+ok(SETTINGS_LIMITS.camZoom.min === 0.6 && SETTINGS_LIMITS.camZoom.max === 2, 'camZoom range 0.6–2');
+updateSettings({ camZoom: 1.5 });
+ok(GameState.s.settings.camZoom === 1.5, 'camZoom persists');
+updateSettings({ camZoom: 99 });
+ok(GameState.s.settings.camZoom === SETTINGS_LIMITS.camZoom.max, 'camZoom clamped to max');
+updateSettings({ camZoom: 0.1 });
+ok(GameState.s.settings.camZoom === SETTINGS_LIMITS.camZoom.min, 'camZoom clamped to min');
+const camNorm = normaliseSettings({ camZoom: 1.25 });
+ok(camNorm.camZoom === 1.25, 'normaliseSettings keeps camZoom');
+resetSettings();
+ok(GameState.s.settings.camZoom === 1, 'reset restores camZoom');
 
 console.log('— Graphics quality & fog —');
 ok(SETTINGS_DEFAULTS.graphicsQuality === 'med', 'graphicsQuality defaults to med');
@@ -218,7 +232,7 @@ for (const k of ['graphicsQuality', 'distanceFog']) {
 ok(typeof SETTINGS_VERSION === 'number', 'SETTINGS_VERSION is a number');
 
 console.log('— ChunkPainter fog helpers —');
-const cp = await import('../src/game/world/chunkPainter.js');
+const cp = await import('../src/game/world/chunkPainter.ts');
 ok(typeof cp.applyFogToChunk === 'function', 'applyFogToChunk exported');
 ok(typeof cp.setAtmosphereState === 'function', 'setAtmosphereState exported');
 ok(typeof cp.getFogColor === 'function', 'getFogColor exported');
@@ -239,7 +253,7 @@ const storm = cp.getFogColor();
 ok(storm !== col, 'getFogColor shifts for storm weather');
 
 console.log('— PostFXSystem helpers —');
-const pfx = await import('../src/game/systems/PostFXSystem.js');
+const pfx = await import('../src/game/systems/PostFXSystem.ts');
 ok(typeof pfx.default === 'function', 'PostFXSystem default export is a class');
 ok(typeof pfx.graphicsQualityNum === 'function', 'graphicsQualityNum exported');
 ok(typeof pfx.graphicsQualityAtLeast === 'function', 'graphicsQualityAtLeast exported');

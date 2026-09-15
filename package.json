@@ -2,13 +2,20 @@
   "name": "rise-of-the-realm",
   "private": true,
   "version": "1.0.0",
-  "description": "Rise of the Realm — an open-world kingdom adventure built with React + Vite + Phaser 4",
+  "description": "Rise of the Realm",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs"
+    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs && node tests/content.mjs && node tests/uidiscipline.mjs && node tests/save.mjs",
+    "typecheck": "tsc --noEmit",
+    "graphify": "madge --extensions js,jsx --layout dot --image docs/dependency-graph.svg --rankdir LR src/",
+    "graphify:circular": "madge --extensions js,jsx --circular --layout dot --image docs/circular-deps.svg --rankdir LR src/",
+    "graphify:json": "madge --extensions js,jsx --json src/ > docs/dependency-graph.json",
+    "graphify:summary": "madge --extensions js,jsx --summary src/",
+    "graphify:orphans": "madge --extensions js,jsx --orphans src/",
+    "graphify:dot": "madge --extensions js,jsx --dot src/"
   },
   "dependencies": {
     "phaser": "^4.2.1",
@@ -16,7 +23,15 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.0",
+    "graphviz": "^0.0.9",
+    "madge": "^8.0.0",
+    "playwright": "^1.62.1",
+    "ts-graphviz": "^3.0.7",
+    "typescript": "^5.9.3",
     "vite": "^8.2.2"
   }
 }

@@ -1,0 +1,507 @@
+{
+  "app/App.jsx": [
+    "app/components/AchievementPopup.jsx",
+    "app/components/BossBar.jsx",
+    "app/components/CharacterCreation.jsx",
+    "app/components/DeathOverlay.jsx",
+    "app/components/DebugPanel.jsx",
+    "app/components/Dialogue.jsx",
+    "app/components/HUD.jsx",
+    "app/components/IntroOverlay.jsx",
+    "app/components/MainMenu.jsx",
+    "app/components/Minimap.jsx",
+    "app/components/Panels.jsx",
+    "app/components/QuestTracker.jsx",
+    "app/components/RulerPanel.jsx",
+    "app/components/Toasts.jsx",
+    "app/components/TouchControls.jsx",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/AchievementPopup.jsx": [
+    "app/components/Overlays.jsx"
+  ],
+  "app/components/BossBar.jsx": [
+    "app/components/Overlays.jsx"
+  ],
+  "app/components/CharacterCreation.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/main.js",
+    "game/systems/LegacyStore.js",
+    "utils/math.js"
+  ],
+  "app/components/Credits.jsx": [],
+  "app/components/DeathOverlay.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/main.js"
+  ],
+  "app/components/DebugPanel.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/ProgressionXP.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/Dialogue.jsx": [
+    "app/components/Overlays.jsx"
+  ],
+  "app/components/HUD.jsx": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/main.js",
+    "hooks/useGameState.js",
+    "utils/math.js"
+  ],
+  "app/components/HowTo.jsx": [],
+  "app/components/IntroOverlay.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/story.js",
+    "game/main.js"
+  ],
+  "app/components/MainMenu.jsx": [
+    "app/components/Credits.jsx",
+    "app/components/HowTo.jsx",
+    "app/components/SettingsPanel.jsx",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/main.js",
+    "game/systems/SaveSystem.js",
+    "hooks/useGameState.js",
+    "utils/math.js"
+  ],
+  "app/components/Minimap.jsx": [
+    "app/components/Overlays.jsx"
+  ],
+  "app/components/Overlays.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/main.js",
+    "game/systems/QuestSystem.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/Panels.jsx": [
+    "game/assets/icons.js",
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/buildings.js",
+    "game/data/factions.js",
+    "game/data/items.js",
+    "game/data/skills.js",
+    "game/main.js",
+    "game/systems/CraftingSystem.js",
+    "game/systems/EconomySystem.js",
+    "game/systems/FactionSystem.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/KingdomEconomy.js",
+    "game/systems/KingdomSystem.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/QuestEngine.js",
+    "game/systems/QuestSystem.js",
+    "game/systems/SaveSystem.js",
+    "game/world/worldGen.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/QuestTracker.jsx": [
+    "app/components/Overlays.jsx"
+  ],
+  "app/components/RulerPanel.jsx": [
+    "game/core/GameState.js",
+    "game/systems/LegacyStore.js"
+  ],
+  "app/components/SettingsPanel.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/AudioSystem.js",
+    "game/systems/SettingsSystem.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/Toasts.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "hooks/useGameState.js"
+  ],
+  "app/components/TouchControls.jsx": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js"
+  ],
+  "game/assets/artCore.js": [],
+  "game/assets/iconPrims.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/iconShapesA.js": [
+    "game/assets/artCore.js",
+    "game/assets/iconPrims.js"
+  ],
+  "game/assets/iconShapesB.js": [
+    "game/assets/artCore.js",
+    "game/assets/iconPrims.js"
+  ],
+  "game/assets/icons.js": [
+    "game/assets/artCore.js",
+    "game/assets/iconShapesA.js",
+    "game/assets/iconShapesB.js",
+    "game/data/items.js"
+  ],
+  "game/assets/index.js": [
+    "game/assets/icons.js",
+    "game/assets/propsFx.js",
+    "game/assets/propsNature1.js",
+    "game/assets/propsNature2.js",
+    "game/assets/propsStructures1.js",
+    "game/assets/propsStructures2.js",
+    "game/assets/propsStructures3.js",
+    "game/assets/sheetsHuman.js",
+    "game/assets/sheetsQuad.js",
+    "game/data/enemies.js"
+  ],
+  "game/assets/propsFx.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/propsNature1.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/propsNature2.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/propsStructures1.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/propsStructures2.js": [
+    "game/assets/artCore.js",
+    "game/assets/propsStructures1.js"
+  ],
+  "game/assets/propsStructures3.js": [
+    "game/assets/artCore.js",
+    "game/assets/propsStructures1.js"
+  ],
+  "game/assets/sheetsHuman.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/assets/sheetsQuad.js": [
+    "game/assets/artCore.js"
+  ],
+  "game/core/BridgeSystem.js": [
+    "game/core/EventBus.js",
+    "game/systems/AchievementSystem.js",
+    "game/systems/QuestEngine.js"
+  ],
+  "game/core/Constants.js": [],
+  "game/core/EventBus.js": [],
+  "game/core/GameState.js": [
+    "game/core/EventBus.js",
+    "game/core/stateFactory.js",
+    "game/data/items.js",
+    "game/systems/LegacyStore.js"
+  ],
+  "game/core/stateFactory.js": [
+    "game/core/Constants.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/data/buildings.js": [
+    "game/data/buildingsA.js",
+    "game/data/buildingsB.js"
+  ],
+  "game/data/buildingsA.js": [],
+  "game/data/buildingsB.js": [],
+  "game/data/enemies.js": [
+    "game/data/enemiesHuman.js",
+    "game/data/enemiesWild.js",
+    "game/data/enemyTeams.js"
+  ],
+  "game/data/enemiesHuman.js": [
+    "game/data/enemyTeams.js"
+  ],
+  "game/data/enemiesWild.js": [
+    "game/data/enemyTeams.js"
+  ],
+  "game/data/enemyTeams.js": [],
+  "game/data/factions.js": [],
+  "game/data/itemDefs.js": [],
+  "game/data/items.js": [
+    "game/data/itemDefs.js",
+    "game/data/itemsArmor.js",
+    "game/data/itemsGear.js",
+    "game/data/itemsResources.js"
+  ],
+  "game/data/itemsArmor.js": [
+    "game/data/itemDefs.js"
+  ],
+  "game/data/itemsGear.js": [
+    "game/data/itemDefs.js"
+  ],
+  "game/data/itemsResources.js": [
+    "game/data/itemDefs.js"
+  ],
+  "game/data/npcs.js": [],
+  "game/data/questsMain.js": [],
+  "game/data/questsSide.js": [],
+  "game/data/recipes.js": [
+    "game/data/recipesA.js",
+    "game/data/recipesB.js"
+  ],
+  "game/data/recipesA.js": [],
+  "game/data/recipesB.js": [],
+  "game/data/skills.js": [],
+  "game/data/story.js": [],
+  "game/entities/BossEnemy.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/entities/Enemy.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/entities/Enemy.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/enemies.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/entities/Player.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/items.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/main.js": [
+    "game/core/BridgeSystem.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/scenes/MenuScene.js",
+    "game/scenes/WorldScene.js",
+    "game/systems/AudioSystem.js",
+    "game/systems/KingdomSystem.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/scenes/MenuScene.js": [
+    "game/assets/propsFx.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/AudioSystem.js"
+  ],
+  "game/scenes/WorldScene.js": [
+    "game/assets/icons.js",
+    "game/assets/index.js",
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/buildings.js",
+    "game/data/enemies.js",
+    "game/data/items.js",
+    "game/data/npcs.js",
+    "game/entities/BossEnemy.js",
+    "game/entities/Enemy.js",
+    "game/entities/Player.js",
+    "game/systems/AchievementSystem.js",
+    "game/systems/AmbientParticles.js",
+    "game/systems/AudioSystem.js",
+    "game/systems/DynamicLights.js",
+    "game/systems/EnvSystem.js",
+    "game/systems/FogCards.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/KingdomEconomy.js",
+    "game/systems/KingdomSystem.js",
+    "game/systems/NightLights.js",
+    "game/systems/PostFXSystem.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/ProgressionXP.js",
+    "game/systems/QuestEngine.js",
+    "game/systems/QuestSystem.js",
+    "game/systems/RaidSystem.js",
+    "game/systems/SaveSystem.js",
+    "game/systems/SettingsSystem.js",
+    "game/systems/TutorialSystem.js",
+    "game/systems/WaterSystem.js",
+    "game/world/biomeTable.js",
+    "game/world/chunkPainter.js",
+    "game/world/nodeTypes.js",
+    "game/world/worldGen.js"
+  ],
+  "game/systems/AchievementSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/LegacyStore.js"
+  ],
+  "game/systems/AmbientParticles.js": [
+    "game/core/GameState.js",
+    "game/systems/SettingsSystem.js",
+    "game/world/worldGen.js"
+  ],
+  "game/systems/AudioSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/ambientSounds.js",
+    "game/systems/audioSfx.js"
+  ],
+  "game/systems/CraftingSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/items.js",
+    "game/data/recipes.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/ProgressionSystem.js"
+  ],
+  "game/systems/DynamicLights.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js"
+  ],
+  "game/systems/EconomySystem.js": [
+    "game/core/Constants.js",
+    "game/data/items.js"
+  ],
+  "game/systems/EnvSystem.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/SettingsSystem.js",
+    "game/systems/WaterSystem.js",
+    "game/systems/particleThrottle.js",
+    "game/world/worldGen.js"
+  ],
+  "game/systems/FactionSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/factions.js"
+  ],
+  "game/systems/FogCards.js": [
+    "game/core/GameState.js",
+    "game/systems/SettingsSystem.js",
+    "game/world/worldGen.js"
+  ],
+  "game/systems/InventorySystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/items.js"
+  ],
+  "game/systems/KingdomEconomy.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/buildings.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/KingdomSystem.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/kingdomSim.js"
+  ],
+  "game/systems/KingdomSystem.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/AchievementSystem.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/QuestEngine.js",
+    "game/systems/kingdomSim.js"
+  ],
+  "game/systems/LegacyStore.js": [],
+  "game/systems/NightLights.js": [
+    "game/core/GameState.js",
+    "game/systems/DynamicLights.js"
+  ],
+  "game/systems/PostFXSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/systems/ProgressionSystem.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/items.js",
+    "game/data/skills.js",
+    "game/systems/ProgressionXP.js"
+  ],
+  "game/systems/ProgressionXP.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/skills.js",
+    "game/systems/AchievementSystem.js",
+    "game/systems/ProgressionSystem.js"
+  ],
+  "game/systems/QuestEngine.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/questsMain.js",
+    "game/data/questsSide.js",
+    "game/systems/AchievementSystem.js",
+    "game/systems/InventorySystem.js",
+    "game/systems/ProgressionSystem.js",
+    "game/systems/StorySystem.js"
+  ],
+  "game/systems/QuestSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/questsSide.js",
+    "game/systems/QuestEngine.js"
+  ],
+  "game/systems/RaidSystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/factions.js",
+    "game/systems/FactionSystem.js"
+  ],
+  "game/systems/SaveSystem.js": [],
+  "game/systems/SettingsSystem.js": [
+    "game/core/Constants.js",
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/systems/AudioSystem.js"
+  ],
+  "game/systems/StorySystem.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js",
+    "game/data/story.js"
+  ],
+  "game/systems/TutorialSystem.js": [
+    "game/core/GameState.js",
+    "game/systems/InventorySystem.js"
+  ],
+  "game/systems/WaterSystem.js": [
+    "game/core/Constants.js",
+    "game/world/worldGen.js"
+  ],
+  "game/systems/ambientSounds.js": [],
+  "game/systems/audioSfx.js": [],
+  "game/systems/kingdomSim.js": [
+    "game/core/Constants.js",
+    "game/data/buildings.js"
+  ],
+  "game/systems/particleThrottle.js": [
+    "game/systems/SettingsSystem.js"
+  ],
+  "game/world/biomeTable.js": [],
+  "game/world/chunkPainter.js": [
+    "game/core/Constants.js",
+    "game/world/biomeTable.js",
+    "game/world/worldGen.js"
+  ],
+  "game/world/nodeTypes.js": [
+    "game/world/biomeTable.js"
+  ],
+  "game/world/worldGen.js": [
+    "game/world/biomeTable.js",
+    "utils/math.js"
+  ],
+  "hooks/useGameState.js": [
+    "game/core/EventBus.js",
+    "game/core/GameState.js"
+  ],
+  "main.jsx": [
+    "app/App.jsx",
+    "game/core/GameState.js",
+    "game/main.js",
+    "styles.css",
+    "utils/math.js"
+  ],
+  "styles.css": [],
+  "utils/math.js": []
+}

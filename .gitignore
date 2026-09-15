@@ -13,6 +13,7 @@ coverage
 # logs
 logs
 _.log
+*.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # dotenv environment variable files
@@ -37,3 +38,9 @@ dist/
 node_modules/
 *.local
 .DS_Store
+
+# graphify knowledge-graph output (local only, never commit)
+graphify-out/
+
+# regenerable test output (browser screenshots, review catalogs)
+tests/_artifacts/

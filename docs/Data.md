@@ -9,6 +9,9 @@ All game data tables and their sources.
 ### Resources (`itemsResources.js`)
 Wood, stone, fiber, leather_hide, flint, herbs, mushrooms, berries, clay, raw_meat, raw_fish, wheat, feathers, bone, iron_ore, coal, silver, gold_nugget, steel_ingot, crystal, moonstone, ancient_core, ancient_relic, tar
 
+### Gather nodes (new variants)
+`tree_birch` (pale birch, yields wood — plains/forest), `rock_mossy` (mossy boulder, yields stone — forest/swamp)
+
 ### Gear (`itemsGear.js`)
 **Axes:** axe_stone (tier 1), axe_iron (tier 2), axe_steel (tier 3)
 **Pickaxes:** pick_stone, pick_iron, pick_steel
