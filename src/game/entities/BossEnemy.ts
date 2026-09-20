@@ -23,6 +23,11 @@ export default class BossEnemy extends Enemy {
     this.radius = this.def.arenaRadius || 520;
     (this.scene as any).bossUI?.show(this);
     Bus.emit('boss-intro', defKey);
+    // Arena telegraph:
+    // show the leash radius on the ground so the player can see how far
+    // they can kite before the boss resets. Pulsing ring, auto-fades.
+    import('../systems/CelebrationFX.ts').then((c) =>
+      c.bossArenaRing(scene, x, y, this.radius));
   }
 
   override update(dt: number, _ctx?: any): void {

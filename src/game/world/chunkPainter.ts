@@ -203,6 +203,32 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
     ctx.globalAlpha = 1;
   }
 
+  // ── 1c. Relief hillshade — directional light from the upper-left ──────
+  // Slope-following illumination gives hills volume instead of flat fills.
+  // Cheap: one coarse grid of elevation gradients; a negative gradient (rise
+  // heading up-left) means the slope faces the sun → lit texel blob. Water
+  // cells are skipped (the water pass owns them).
+  {
+    const GRID = 32;
+    for (let yy = 0; yy < size; yy += GRID) {
+      for (let xx = 0; xx < size; xx += GRID) {
+        const wx = originX + xx + GRID / 2;
+        const wy = originY + yy + GRID / 2;
+        if (isWaterAt(wx, wy)) continue;
+        const e = elevationAt(wx, wy);
+        const slope = (elevationAt(wx + 5, wy) - e) + (elevationAt(wx, wy + 5) - e);
+        const strength = Math.max(-10, Math.min(10, slope * 160));
+        const a = Math.abs(strength) * 0.09;
+        if (a < 0.011) continue;
+        ctx.fillStyle = strength < 0 ? '#f2f7ee' : '#0b0f08';
+        ctx.globalAlpha = a;
+        roundBlob(ctx, xx + GRID / 2, yy + GRID / 2, GRID * 0.8);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // ── 2. Moisture blotches (soft organic shapes) ───────────────────────
   for (let y = 0; y < size; y += BLOTCH_STEP) {
     for (let x = 0; x < size; x += BLOTCH_STEP) {
@@ -246,7 +272,14 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
     } else if (biome.ashen) {
       ctx.fillStyle = i % 4 === 0 ? '#d96b3c' : shadeHex(biome.grassDark, 0.92);
     } else {
-      ctx.fillStyle = i % 5 === 0 ? biome.grassDark : biome.accent;
+      // Multi-tone green mix — five shades of grass/soil/leaf so the fill
+      // never reads as a flat wash at close zoom.
+      const tone = rand(px + 5, py + 5);
+      if (tone > 0.76) ctx.fillStyle = shadeHex(biome.accent, 1.26);       // sunlit grass
+      else if (tone > 0.56) ctx.fillStyle = shadeHex(biome.grassDark, 1.12); // fresh verd
+      else if (tone > 0.38) ctx.fillStyle = biome.accent;                  // light blade
+      else if (tone > 0.18) ctx.fillStyle = biome.grassDark;               // shadow grass
+      else ctx.fillStyle = shadeHex(biome.grass, 0.86);                    // soil shadow
     }
     ctx.fillRect(px, py, s, s * (0.6 + rand(px + 4, py + 4) * 1.2));
   }
@@ -328,6 +361,31 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+
+  // ── 3cb. Fallen-leaf litter (green biomes) ─────────────────────────
+  // Rotated dead-leaf ellipses in forest / riverlands / plains / swamp —
+  // reads as forest floor at close zoom, density follows the biome water.
+  if (!biome.snowy && !biome.sandy && !biome.rocky && !biome.ashen) {
+    const litterColors = biome.murkyWater
+      ? ['#5c5634', '#4e4a2c', '#6a5c38']        // swamp: muted, wet leaves
+      : ['#6b5533', '#7a6a3a', '#5c4a2e', '#6f5c3c', '#8a7a45'];
+    const litterCount = Math.floor(46 * biome.decoDensity);
+    for (let i = 0; i < litterCount; i++) {
+      const lx = rand(originX + i * 43.9, originY + i * 61.3) * size;
+      const ly = rand(originY + i * 33.7, originX + i * 79.1) * size;
+      if (isWaterAt(originX + lx, originY + ly)) continue;
+      const le = elevationAt(originX + lx, originY + ly);
+      if (le < RIVER_LEVEL - SHORE_EDGE) continue;
+      const lw2 = 1.8 + rand(lx + 3, ly + 3) * 1.6;
+      const lh2 = 0.8 + rand(lx + 7, ly + 7) * 0.7;
+      ctx.globalAlpha = 0.22 + rand(lx + 11, ly + 11) * 0.2;
+      ctx.fillStyle = litterColors[i % litterColors.length] ?? '#6b5533';
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, lw2, lh2, rand(lx + 13, ly + 13) * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   // ── 3d. Dirt patches + slope shading ─────────────────────────────
   // Dirt patches give close-zoom readability; slope shade fakes AO on hills.
@@ -482,20 +540,33 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
         const isShore = e > RIVER_LEVEL - SHORE_FRINGE;
 
         if (isShore) {
-          // Shoreline: sandy / muddy fringe
+          // Shoreline: sandy / muddy fringe + soft bank glow (non-murky)
           ctx.fillStyle = biome.murkyWater
             ? 'rgba(140,125,85,0.7)'
             : 'rgba(205,191,132,0.7)';
           roundBlob(ctx, x + 4, y + 4, 8);
           ctx.fill();
+          if (!biome.murkyWater) {
+            ctx.fillStyle = 'rgba(216,232,214,0.10)';
+            roundBlob(ctx, x + 4, y + 4, 13);
+            ctx.fill();
+          }
         } else {
           // Deep water
           const depth = Math.min(1, shoreDist / 0.15);
           ctx.fillStyle = biome.murkyWater
             ? lerpColor('#5a7a5e', '#2a3d2e', depth)
             : lerpColor('#5590b0', '#2a4d6e', depth);
-          roundBlob(ctx, x + 4, y + 4, 7);
+          roundBlob(ctx, x + 4, y + 4, 8);
           ctx.fill();
+          // Darker depth pit — gives the surface vertical heft
+          if (depth > 0.4 && rand(wx + 7, wy + 7) > 0.72) {
+            ctx.globalAlpha = 0.2;
+            ctx.fillStyle = 'rgba(0,0,12,0.4)';
+            roundBlob(ctx, x + 4, y + 4, 4.4);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
 
           // Water ripple highlights (non-murky only)
           if (!biome.murkyWater && rand(wx, wy) > 0.82 && depth > 0.2) {
@@ -628,8 +699,7 @@ export function setAtmosphereState({ timeOfDay, weather }: AtmosphereState): voi
     _fogDirty = true;
     // NOTE: no longer cache.clear() — that caused a full rebake hitch every
     // bucket change. New chunks pick up the new fog; existing chunks keep
-    // their baked fog until naturally evicted. Full day/night ground relight
-    // is Phase B (see docs/improvements/01_GRAPHICS_GROUND_VIEW.md).
+    // their baked fog until naturally evicted.
   }
 }
 export function setFogBiomeTint(biomeId: string, color: string): void {

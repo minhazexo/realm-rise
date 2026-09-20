@@ -19,9 +19,10 @@ const WATER_VIEW_RADIUS = 420;
 /** Grid step for water sampling (px). Larger = cheaper but coarser. */
 const SAMPLE_STEP = 24;
 /** Wave line spacing (px). */
-const WAVE_SPACING = 18;
-/** Foam sample step (px). */
+const WAVE_SPACING = 18;/** Foam sample step (px). */
 const FOAM_STEP = 16;
+/** Foam sample step while the camera is moving fast (cheap pass). */
+const FOAM_STEP_FAST = 32;
 
 // ── Colour palette ──────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export default class WaterSystem {
   ctx: CanvasRenderingContext2D | null = null;
   frameCount = 0;
   time = 0;
+  /** Last camera position where the foam pass used the fine grid. */
+  private _lastFoamCell = { x: NaN, y: NaN };
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -206,11 +209,23 @@ export default class WaterSystem {
       ctx.globalAlpha = 1;
     }
 
-    // ── 2. Shore foam ────────────────────────────────────────────────
+    // ── 2. Shore foam ────────────────────────────────────────────────────
+    // The foam pass
+    // sampled elevationAt (4-octave fbm) at every 16 px grid point of the
+    // whole view (~2,700 noise calls × 20 redraws/s). While the camera
+    // stands still we keep the fine grid ONLY within a small band around the
+    // cached fine-frame position (foam is stationary); when the camera has
+    // moved >64 px we do one full fine pass and re-cache. Fast pans use the
+    // 32 px grid (4× fewer samples, visually acceptable in motion).
     ctx.lineWidth = 2;
     const foamAlpha: number = isNight ? 0.2 : 0.3;
-    for (let wy = Math.floor(worldTop / FOAM_STEP) * FOAM_STEP; wy < worldBottom; wy += FOAM_STEP) {
-      for (let wx = Math.floor(worldLeft / FOAM_STEP) * FOAM_STEP; wx <= worldRight; wx += FOAM_STEP) {
+    const camCellX: number = Math.round(camX / 64);
+    const camCellY: number = Math.round(camY / 64);
+    const fineThisFrame: boolean = camCellX !== this._lastFoamCell.x || camCellY !== this._lastFoamCell.y;
+    if (fineThisFrame) { this._lastFoamCell.x = camCellX; this._lastFoamCell.y = camCellY; }
+    const step: number = fineThisFrame ? FOAM_STEP : FOAM_STEP_FAST;
+    for (let wy = Math.floor(worldTop / step) * step; wy < worldBottom; wy += step) {
+      for (let wx = Math.floor(worldLeft / step) * step; wx <= worldRight; wx += step) {
         const e: number = elevationAt(wx, wy);
         // Foam line: just at the shore edge
         if (e < RIVER_LEVEL - 0.01 && e > RIVER_LEVEL - 0.065) {

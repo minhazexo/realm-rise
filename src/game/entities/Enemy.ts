@@ -7,9 +7,12 @@ import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { Bus } from '../core/EventBus.ts';
 import { shakeAllowed } from '../systems/SettingsSystem.ts';
+import { applyBreathing } from '../systems/BreathingFX.ts';
 import { DIFFICULTY } from '../core/Constants.ts';
 import { getEnemyDef } from '../data/enemies.ts';
 import { awardXP, profXP } from '../systems/ProgressionSystem.ts';
+import { BIOMES } from '../world/biomeTable.ts';
+import { biomeAt } from '../world/worldGen.ts';
 
 const STATE = Object.freeze({ IDLE: 0, PATROL: 1, DETECT: 2, CHASE: 3, ATTACK: 4, RETREAT: 5, SEARCH: 6, DEAD: 7 });
 
@@ -41,6 +44,10 @@ export default class Enemy {
   moveCd: Record<string, number> = {};
   chargeCd: number = 0;
   pounceCd: number = 0;
+  /** Daylight accumulator for nightOnly fade-despawn. */
+  _daylightAcc: number = 0;
+  /** Idle-breathing phase accumulator (seconds) — see BreathingFX. */
+  _breathAcc = { value: 0 };
   _hpBarTimer: number = 0;
   _hpBarAlpha: number = 0;
   _hpBarW: number = 0;
@@ -144,9 +151,36 @@ export default class Enemy {
     if (!p || !p.sprite || S.session_dead) {
       (this.sprite.body as Phaser.Physics.Arcade.Body | null)?.setVelocity(0, 0);
       this.sprite.setFrame(`${this.dir}_1`);
+      // Clear aggro/windup tints so enemies don't stay permanently orange/red
+      // after the player dies mid-fight (tint survived the early-return).
+      this.sprite.clearTint();
+      this.windingUp = false;
       return;
     }
-    if (this.def.nightOnly && this.isDay()) { (this.sprite.body as Phaser.Physics.Arcade.Body | null)?.setVelocity(0, 0); return; }
+    if (this.def.nightOnly) {
+      // Daylight banishment: fade out + despawn instead of freezing in place
+      // all day (frozen noon skeletons read as bugs). Bosses are exempt.
+      if (this.isDay()) {
+        this._daylightAcc = (this._daylightAcc || 0) + dt;
+        (this.sprite.body as Phaser.Physics.Arcade.Body | null)?.setVelocity(0, 0);
+        if (this._daylightAcc > 0.6) {
+          this.sprite.setAlpha(Math.max(0, this.sprite.alpha - dt * 1.4));
+          this.shadow?.setAlpha(Math.max(0, (this.shadow.alpha || 0) - dt * 1.4));
+          if (this.sprite.alpha <= 0.02) {
+            this.dead = true;
+            this.state = STATE.DEAD;
+            this.hpBar?.destroy();
+            this.hpBar = null;
+            this.shadow?.destroy();
+            this.shadow = null;
+            this.sprite.destroy();
+            return;
+          }
+        }
+        return;
+      }
+      this._daylightAcc = 0;
+    }
 
     const d: number = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
     const detect: number = this.boss ? this.def.detect : this.aggro * (1 - (S.player.derived?.stealth || 0));
@@ -331,13 +365,23 @@ export default class Enemy {
   syncAnim(dt: number): void {
     const moving: boolean = ((this.sprite.body as Phaser.Physics.Arcade.Body | null)?.velocity.lengthSq() ?? 0) > 400;
     if (moving) {
+      // Leaving idle: snap scale back so breathing never carries over.
+      if (this.sprite.scaleY !== this.scale) this.sprite.setScale(this.scale);
       this._walkTimer += dt;
       if (this._walkTimer > 0.13) {
         this._walkTimer = 0;
         this.walkPhase = (this.walkPhase + 1) % 3;
       }
       this.sprite.setFrame(`${this.dir}_${this.walkPhase}`);
-    } else this.sprite.setFrame(`${this.dir}_1`);
+    } else {
+      this.sprite.setFrame(`${this.dir}_1`);
+      // Idle breathing (shared helper): slower breath for big creatures
+      // (bear ~0.45 Hz, goblin ~0.75 Hz). Only when not winding up
+      // (attack squash owns the transform then).
+      if (!this.windingUp) {
+        applyBreathing(this.sprite, this._breathAcc, dt, this.scale, 0.6 / Math.max(0.7, this.scale || 1));
+      }
+    }
   }
 
   tryAttack(p: any): void {
@@ -421,8 +465,22 @@ export default class Enemy {
     const goldMult: number = (DIFFICULTY as any)[GameState.s.settings.difficulty]?.loot || 1;
     if (this.def.goldDrop) (this.scene as any).dropLootGold(this.sprite.x, this.sprite.y, Math.round(this.def.goldDrop * goldMult));
 
-    awardXP(this.def.xp, 'kill');
+    // Kill XP scales with the biome's danger multiplier (swamp 1.25 …
+    // volcanic 1.6), making dangerous biomes worth the trip.
+    let xpGain: number = this.def.xp;
+    try {
+      const bId: string = biomeAt(this.sprite.x, this.sprite.y);
+      const dm: number = BIOMES[bId]?.dangerMult || 1;
+      xpGain = Math.round(xpGain * dm);
+    } catch { /* flat XP fallback */ }
+    awardXP(xpGain, 'kill');
     profXP('combat', 6);
+    // Kill-reward beat: anchor the XP gain at the corpse so kills read as
+    // wins; boss deaths get a heavier burst.
+    try {
+      import('../systems/CelebrationFX.ts').then((c) =>
+        c.killRewardBeat(this.scene as any, this.sprite.x, this.sprite.y, xpGain, this.boss));
+    } catch { /* cosmetic */ }
     // ── Combat reward: stamina restore on kill ──────────────────────────
     // Rewards aggressive play and creates exciting kill chains.
     const killStamina: number = this.boss ? 25 : 6;
@@ -454,3 +512,5 @@ export default class Enemy {
     return t > 0.28 && t < 0.72;
   }
 }
+
+

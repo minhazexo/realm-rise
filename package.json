@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs && node tests/content.mjs && node tests/uidiscipline.mjs && node tests/save.mjs",
+    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs && node tests/content.mjs && node tests/uidiscipline.mjs && node tests/save.mjs && node tests/ambient.mjs && node tests/autoattack.mjs",
     "typecheck": "tsc --noEmit",
     "graphify": "madge --extensions js,jsx --layout dot --image docs/dependency-graph.svg --rankdir LR src/",
     "graphify:circular": "madge --extensions js,jsx --circular --layout dot --image docs/circular-deps.svg --rankdir LR src/",

@@ -70,7 +70,8 @@ export const SETTINGS_DEFAULTS: GameSettings = Object.freeze({
     photosensitive: false,
     damageNumbers: true,
     hpBarsAbove: true,
-    colorblindHints: false
+    colorblindHints: false,
+    autoAttack: true
   },
   uiScale: 1,           // 0.8 – 1.4
   textSize: 1,          // 0.85 – 1.4 (font-size multiplier)
@@ -343,6 +344,11 @@ export function getSetting(key: string): unknown {
   return SETTINGS_DEFAULTS[key];
 }
 
+/** Is reduced-motion preference on? All decorative idle motion gates here. */
+export function reducedMotion(): boolean {
+  return GameState.s?.settings?.toggles?.reducedMotion === true;
+}
+
 /** Is screen shake currently disabled by user preference? */
 export function screenShakeEnabled(): boolean {
   const s: GameSettings | undefined = GameState.s?.settings;
@@ -354,8 +360,7 @@ export function shakeAllowed(): boolean {
   const s: GameSettings | undefined = GameState.s?.settings;
   if (!s) return true;
   if (s.toggles?.screenShake === false) return false;
-  if (s.toggles?.reducedMotion === true) return false;
-  if (s.toggles?.photosensitive === true) return false;
+  if (reducedMotion() || photosensitiveMode()) return false;
   return true;
 }
 

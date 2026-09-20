@@ -6,7 +6,7 @@ import GameState from '../core/GameState.ts';
 import { Bus } from '../core/EventBus.ts';
 import { DAYNIGHT_CONFIG, WEATHER_CONFIG } from '../core/Constants.ts';
 import { biomeAt } from '../world/worldGen.ts';
-import { particleMultiplier, photosensitiveMode } from './SettingsSystem.ts';
+import { particleMultiplier, photosensitiveMode, reducedMotion } from './SettingsSystem.ts';
 import { throttleConfig } from './particleThrottle.ts';
 import { setSkyColor, setSunPosition } from './WaterSystem.ts';
 
@@ -409,8 +409,7 @@ export default class EnvSystem {
         // vignette still warns but doesn't strobe. Static in photosensitivity
         // mode — no oscillation at all.
         const danger = (0.3 - hpPct) / 0.3; // 0 at 30% HP, 1 at 0% HP
-        const reduced = S.settings?.toggles?.reducedMotion === true;
-        const pulse = photosensitiveMode() ? 0.6 : reduced ? 0.65 : 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
+        const pulse = photosensitiveMode() ? 0.6 : reducedMotion() ? 0.65 : 0.5 + 0.5 * Math.sin(performance.now() * 0.004);
         this.dangerVignette.setAlpha(danger * (0.45 + pulse * 0.25));
       } else {
         this.dangerVignette.setAlpha(0);

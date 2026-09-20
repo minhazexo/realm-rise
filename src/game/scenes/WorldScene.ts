@@ -44,6 +44,9 @@ import * as gatherSys from '../systems/GatherSystem.ts';
 import { updateNightMask } from '../systems/NightLights.ts';
 import { updateFogCards } from '../systems/FogCards.ts';
 import { updateAmbientParticles, destroyAmbientParticles } from '../systems/AmbientParticles.ts';
+import { levelUpCeremony } from '../systems/CelebrationFX.ts';
+import { autoAttackTick } from '../systems/AutoAttackSystem.ts';
+import GrassField from '../systems/GrassField.ts';
 
 export const AUTOSAVE_INTERVAL_MS: number = 100000;
 
@@ -68,6 +71,9 @@ export default class WorldScene extends Phaser.Scene {
   env!: any;
   waterSystem!: any;
   postFX!: any;
+  grassField!: GrassField;
+  _offLevelUp?: () => void;
+  _offWeatherGrass?: () => void;
   bossUI!: any;
   keys!: any;
   bindKeys!: any;
@@ -126,6 +132,14 @@ export default class WorldScene extends Phaser.Scene {
 
     this.env = new EnvSystem(this);
     this.env.create();
+
+    // Realistic grass overlay: procedural blade slabs + wind + trample.
+    // Weather-synced via EnvSystem's bus channel; torn down on shutdown.
+    this.grassField = new GrassField(this);
+    this.grassField.create();
+    this._offWeatherGrass = Bus.on('weather-changed', (w: any) => {
+      try { this.grassField?.setWeather(String(w)); } catch { /* cosmetic */ }
+    });
 
     // Animated water overlay
     this.waterSystem = new WaterSystem(this);
@@ -210,6 +224,18 @@ export default class WorldScene extends Phaser.Scene {
     };
     buildAutosaveTimer();
     Bus.on('settings-applied', buildAutosaveTimer);
+    // Level-up ceremony: the jingle alone felt flat — add the visual
+    // shockwave/banner/zoom beat. Unsubscribe kept: scene restarts
+    // previously stacked handlers here.
+    this._offLevelUp = Bus.on('level-up', (p: any) => {
+      try { levelUpCeremony(this, Number(p?.level) || 1); } catch { /* cosmetic */ }
+    });
+    // Full scene-shutdown cleanup: bus listeners + grass overlay.
+    this.events.once('shutdown', () => {
+      try { this._offLevelUp?.(); } catch { /* ignore */ }
+      try { this._offWeatherGrass?.(); } catch { /* ignore */ }
+      try { this.grassField?.destroy(); } catch { /* ignore */ }
+    });
     // Camera zoom follows the setting live (slider / HUD buttons / keys).
     Bus.on('settings-applied', () => { try { this.applyCamZoom(); } catch { /* ignore */ } });
     Bus.on('cam-zoom', (dir: any) => { try { this.nudgeCamZoom(dir); } catch { /* ignore */ } });
@@ -245,6 +271,13 @@ export default class WorldScene extends Phaser.Scene {
     const dt: number = Math.min(0.05, delta / 1000);
     this.env.update(dt);
     if (!S.session_dead) this.player.update(dt, this.envContextInput());
+
+    // Defensive auto-attack: counter-swing when enemies attack or close to
+    // melee range (toggle: Settings → Gameplay → "Auto-attack when attacked").
+    if (!S.session_dead) { try { autoAttackTick(this, dt); } catch { /* assist never crashes the frame */ } }
+
+    // Grass overlay tick: wind ripple, coverage recycling, player trample.
+    if (this.grassField) { try { this.grassField.update(dt); } catch { /* grass never crashes the frame */ } }
 
     // Sync atmospheric state so the chunk fog tint tracks time/weather.
     setAtmosphereState({
@@ -338,6 +371,12 @@ export default class WorldScene extends Phaser.Scene {
       try { this.refreshStationsNear(); } catch { /* player may be dead */ }
       try { this.relightChunks(); } catch { /* textures may be gone */ }
     }
+    // Combat zoom bias: re-apply on a slow cadence so the camera eases
+    // toward the biased baseline in combat and back when it ends
+    // (applyCamZoom lerps, so a few times a second is smooth, no snap).
+    if (this._frame % 20 === 0) {
+      try { this.applyCamZoom(); } catch { /* headless */ }
+    }
     this.saveAcc += dt;
   }
 
@@ -404,7 +443,11 @@ export default class WorldScene extends Phaser.Scene {
           }
           const img = this.add.image(cxCenter, cyCenter, texKey)
             .setOrigin(0.5)
-            .setDepth(0);
+            // Ground anchors BELOW the world's y range: entities (incl. trees)
+            // are y-sorted with setDepth(Math.round(y)), so the map spans
+            // ±WORLD_CONFIG.worldHalfExtent and negative-y entities would
+            // otherwise sink under a depth-0 ground and turn invisible.
+            .setDepth(-WORLD_CONFIG.worldHalfExtent * 2);
           img.setDisplaySize(cs, cs);
           this.chunkGroup.add(img);
           this.activeChunks.set(key, img);
@@ -595,6 +638,17 @@ export default class WorldScene extends Phaser.Scene {
     void _px; void _py;
     for (const npc of this.npcs) {
       const s = npc.sprite;
+      // Distant NPCs skip the wander AI entirely (enemies already cull at
+      // 1250/1800 px) — depth/shadow still update so nothing pops when
+      // re-entering range.
+      if (_px != null && _py != null) {
+        const ndx: number = s.x - _px, ndy: number = s.y - _py;
+        if (ndx * ndx + ndy * ndy > 1600 * 1600) {
+          s.setDepth(Math.round(s.y));
+          npc.shadow?.setPosition(s.x, s.y + 3).setDepth(s.depth - 1);
+          continue;
+        }
+      }
       // Skip AI if NPC is being talked to
       if ((GameState.session as any).dialogue?.npc === npc.key) {
         s.setDepth(Math.round(s.y));
@@ -785,6 +839,22 @@ export default class WorldScene extends Phaser.Scene {
       p.y += p.vy * dt;
       p.traveled += Math.hypot(p.vx * dt, p.vy * dt);
       p.img.setPosition(p.x, p.y);
+      // Arrow trail: fading after-images make fast projectiles readable.
+      // Cheap: one small image every 40ms per projectile, auto-destroyed.
+      // Skipped on low quality.
+      try {
+        const q: string = GameState.s?.settings?.graphicsQuality || 'med';
+        p._trailAcc = (p._trailAcc || 0) + dt;
+        if (q !== 'low' && p._trailAcc > 0.04) {
+          p._trailAcc = 0;
+          const ghost = this.add.image(p.x, p.y, p.img.texture.key)
+            .setDepth(p.img.depth - 1)
+            .setRotation(p.img.rotation)
+            .setScale(p.img.scaleX * 0.9)
+            .setAlpha(0.35);
+          this.tweens.add({ targets: ghost, alpha: 0, duration: 160, onComplete: () => { try { ghost.destroy(); } catch { /* gone */ } } });
+        }
+      } catch { /* cosmetic only */ }
       if (p.traveled > p.maxDist || Math.abs(p.x) > WORLD_CONFIG.worldHalfExtent || Math.abs(p.y) > WORLD_CONFIG.worldHalfExtent) {
         this.destroyProjectile(p);
         continue;
@@ -1044,34 +1114,66 @@ function kingdomPct(): number {
   return Math.round((owned / 18) * 100);
 }
 
-/** Simple world-space floating combat/resource text pool. */
+/**
+ * World-space floating combat/resource text pool.
+ *
+ * 24 Text objects reused round-robin instead of one create+destroy per
+ * float (a 6-raider siege produced ~20 Text allocations/second). A reused
+ * float kills its previous tween, retints/repositions and re-animates —
+ * visually identical.
+ */
 class Floater {
   scene: Phaser.Scene;
-  items: any[];
+  private pool: Phaser.GameObjects.Text[] = [];
+  private poolIdx = 0;
+  private static POOL_SIZE = 24;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    this.items = [];
   }
+
   add(x: number, y: number, text: string, color = '#fff', scale = 1): void {
-    const t = this.scene.add.text(x, y, text, {
-      fontFamily: 'Spectral', fontSize: `${Math.round(15 * scale)}px`, color,
-      stroke: '#241d17', strokeThickness: 3
-    }).setOrigin(0.5).setDepth(900);
+    const quality: string = GameState.s?.settings?.graphicsQuality || 'med';
+    let t: Phaser.GameObjects.Text;
+    if (this.pool.length < Floater.POOL_SIZE) {
+      // Warm the pool lazily — first floats still create, later ones reuse.
+      t = this.scene.add.text(x, y, text, {
+        fontFamily: 'Spectral', fontSize: `${Math.round(15 * scale)}px`, color,
+        stroke: '#241d17', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(900);
+      this.pool.push(t);
+    } else {
+      t = this.pool[this.poolIdx % Floater.POOL_SIZE]!;
+      this.poolIdx = (this.poolIdx + 1) % Floater.POOL_SIZE;
+      // Kill any tween from a previous life before reusing the object.
+      this.scene.tweens.killTweensOf(t);
+      t.setText(text)
+        .setPosition(x, y)
+        .setFontSize(Math.round(15 * scale))
+        .setColor(color)
+        .setAlpha(1)
+        .setScale(1);
+    }
     // Apply FX per quality tier so critical / rare / heal pop visually.
     try {
-      const quality: string = GameState.s?.settings?.graphicsQuality || 'med';
       if (quality !== 'low') {
         // Per-text bloom: a subtle outer glow makes damage numbers & loot
         // feel punchy. The strength scales with quality so 'low' stays cheap.
-        const strength: number = quality === 'ultra' ? 1.6 : quality === 'high' ? 1.0 : 0.55;
-        t.setBlendMode(Phaser.BlendModes.ADD);
-        if ((t as any).postFX) (t as any).postFX.addBloom(parseInt(color.slice(1), 16) || 0xffe9a8, strength, 6, 0.4);
+        // Bloom is added once per pooled object (first life only).
+        if (!(t as any)._bloomApplied) {
+          const strength: number = quality === 'ultra' ? 1.6 : quality === 'high' ? 1.0 : 0.55;
+          t.setBlendMode(Phaser.BlendModes.ADD);
+          if ((t as any).postFX) (t as any).postFX.addBloom(parseInt(color.slice(1), 16) || 0xffe9a8, strength, 6, 0.4);
+          (t as any)._bloomApplied = true;
+        }
       }
     } catch { /* FX not available — fine */ }
     this.scene.tweens.add({
       targets: t, y: y - 34, alpha: 0, duration: 900,
-      onComplete: () => t.destroy()
+      onComplete: () => { try { t.setAlpha(0).setVisible(false); } catch { /* gone */ } }
     });
+    t.setVisible(true);
   }
+
   update(_dt?: number): void { void _dt; /* tweens handle lifecycle */ }
 }

@@ -12,6 +12,7 @@ Status of every major feature in the game.
 | Chunk streaming | ✅ | 512px chunks, radius-3 active set |
 | Player movement | ✅ | WASD + mouse, sprint, dodge roll |
 | Melee combat | ✅ | Light/heavy attacks, arc-based, knockback |
+| Auto-attack assist | ✅ | Defensive counter-swing when enemies attack/close in; toggle in Settings → Gameplay; `tests/autoattack.mjs` |
 | Ranged combat | ✅ | Arrow/projectile system, pierce |
 | Blocking/shields | ✅ | Stamina-based, damage reduction |
 | Equipment system | ✅ | 8 slots, durability, stat mods |
@@ -106,3 +107,23 @@ Navigation verification: `node tests/navigation-browser.mjs` starts its own Vite
 ## Incomplete / Known Issues
 
 See `docs/TODOs.md` for the full list.
+
+## Game Feel (Quality Pass 1) ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Level-up ceremony | ✅ | Ring shockwave + gold pulse + banner + zoom punch (`CelebrationFX`) |
+| Kill reward beat | ✅ | XP float anchored at corpse; bosses burst |
+| Idle breathing | ✅ | Player + enemies, scale-y micro-oscillation, reduced-motion aware |
+| Attack anticipation | ✅ | 50 ms squash before the slash arc; heavies squash deeper |
+| Projectile trails | ✅ | Arrow after-images every 40 ms, skipped on low quality |
+| Gather chips | ✅ | Per-hit particles tinted by yielded resource |
+| Combat camera bias | ✅ | 4% zoom-out while `inCombat`, smooth lerp |
+| Boss arena ring | ✅ | Pulsing ground ring shows the leash radius |
+| Biome danger XP | ✅ | Kill XP × biome `dangerMult` (1.25–1.6) |
+| Parry buff | ✅ | +12 stamina, 0.2 s counter window |
+| Night-only despawn | ✅ | Undead fade at dawn instead of freezing |
+| Goblin flee | ✅ | `cowardly` wired to `fleeBelowHpPct: 0.35` |
+| Raid columns | ✅ | Raiders march staggered, two abreast |
+| Floater pool | ✅ | 24 reused Text objects (was ~20 allocs/s in sieges) |
+| Foam fast pass | ✅ | 32px grid while camera holds; fine pass on 64px move |

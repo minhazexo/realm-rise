@@ -72,8 +72,8 @@ try {
     await nameInput.fill('Test Hero');
     log('typed name');
   }
-  // Try to find a begin/start button.
-  const startBtn = page.locator('button', { hasText: /begin|start|create|play/i }).first();
+  // Try to find a begin/start button (the creation CTA is "SURVIVE THE STORM").
+  const startBtn = page.locator('button', { hasText: /begin|start|create|play|storm/i }).first();
   if (await startBtn.count()) {
     await startBtn.click();
     log('started game');
@@ -116,6 +116,75 @@ try {
   await page.keyboard.press('Escape');
   await wait(400);
   await shot('06-after-attack');
+
+  // ── Feature checks (auto-attack + grass overlay) ───────────────────────
+  // Runs in the desktop context while the world is still active. If the
+  // world never booted (no start button found), the world() helper throws
+  // inside evaluate and the block is skipped safely.
+  try {
+    // Close any open panel (auto-attack respects UI panels by design), then
+    // let the grass build queue drain after the walk above (refresh runs
+    // every 0.25s; a fresh window drains in ~1s at 8 slabs/frame).
+    await page.keyboard.press('Escape');
+    await wait(1800);
+    log('feature checks: grass + auto-attack');
+    const feats = await page.evaluate(async () => {
+      const g = window.riseGame;
+      const sc = g && g.scene.getScene('WorldScene');
+      if (!sc || !g.scene.isActive('WorldScene')) return { skipped: 'world not active' };
+      const out = {};
+      // Grass: every sampled VISIBLE pixel must sit inside some live slab's
+      // rect (the actual "no visible gap" guarantee — lattice-cell counting
+      // over-counts zero-pixel slivers at the screen edge). Pool cap too.
+      const gf = sc.grassField;
+      if (gf) {
+        const TILE_W = 160, TILE_H = 64;
+        const view = sc.cameras.main.worldView;
+        const live = [];
+        for (const s of gf.slabs.values()) live.push([s.sx, s.sy]);
+        let samples = 0, covered = 0;
+        const STEP = 40;
+        for (let py = view.y + TILE_H / 2; py < view.y + view.height; py += STEP) {
+          for (let px = view.x + TILE_W / 2; px < view.x + view.width; px += STEP) {
+            samples++;
+            for (const [cx, cy] of live) {
+              if (Math.abs(px - cx) <= TILE_W / 2 && Math.abs(py - cy) <= TILE_H / 2) { covered++; break; }
+            }
+          }
+        }
+        out.grass = { want: samples, covered, hidden: gf.hidden.size };
+        out.grassOk = covered === samples && gf.hidden.size <= 240;
+      }
+      // Auto-attack: spawn an ATTACK-state goblin; the assist must lock it.
+      const EnemyMod = (await import('/src/game/entities/Enemy.ts')).default;
+      const e = new EnemyMod(sc, 'goblin', sc.player.sprite.x + 30, sc.player.sprite.y);
+      e.state = 4;
+      sc.enemies.push(e);
+      const t0 = performance.now();
+      let locked = false;
+      while (performance.now() - t0 < 1500) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (sc._autoAtk && sc._autoAtk.lock === e) { locked = true; break; }
+      }
+      e.dead = true;
+      const i = sc.enemies.indexOf(e);
+      if (i >= 0) sc.enemies.splice(i, 1);
+      try { e.sprite?.destroy(); } catch { /* gone */ }
+      try { e.hpBar?.destroy(); } catch { /* gone */ }
+      out.autoAttackLocked = locked;
+      return out;
+    });
+    if (feats.skipped) {
+      log('  skipped: ' + feats.skipped);
+    } else {
+      log(`  grass coverage: ${feats.grass ? feats.grass.covered + '/' + feats.grass.want : 'n/a'}, hidden: ${feats.grass ? feats.grass.hidden : 'n/a'}`);
+      log(`  auto-attack lock: ${feats.autoAttackLocked ? 'OK' : 'FAIL'}`);
+      if (!feats.autoAttackLocked) errors.push('FEATURE: auto-attack did not lock an attacking enemy');
+      if (feats.grass && !feats.grassOk) errors.push('FEATURE: grass coverage/pool out of bounds');
+    }
+  } catch (e) {
+    log('feature checks skipped: ' + e.message);
+  }
 
   // Try the main menu's "Continue" path: reload the page and see whether the
   // menu renders without errors.
