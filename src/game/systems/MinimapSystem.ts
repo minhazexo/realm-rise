@@ -10,6 +10,7 @@
 // POIs → gather nodes → NPCs → enemies → player → compass → vignette.
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
+import { updateNavigation } from './NavigationSystem.ts';
 import { WORLD_CONFIG } from '../core/Constants.ts';
 import { allPois } from '../world/worldGen.ts';
 import { drawMapTerrain, poiStyle, nodeGlyph } from '../world/mapRender.ts';
@@ -67,6 +68,7 @@ const FALLBACK_DIR: [number, number] = [0, 1];
  * so headless/test environments never crash.
  */
 export function updateMinimap(scene: MinimapScene, px: number, py: number): void {
+  updateNavigation(px, py);
   if (typeof document === 'undefined') return;
   const canvas: HTMLCanvasElement | null = document.getElementById('minimap-canvas') as HTMLCanvasElement | null;
   if (!canvas) return;
@@ -219,6 +221,23 @@ export function updateMinimap(scene: MinimapScene, px: number, py: number): void
     ctx.moveTo(mx, my - r); ctx.lineTo(mx + r, my); ctx.lineTo(mx, my + r); ctx.lineTo(mx - r, my);
     ctx.closePath(); ctx.fill();
     ctx.strokeStyle = e.boss ? '#ffffff' : 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  // Navigation pin and a straight-line bearing (not a pathfinding route).
+  const waypoint = GameState.session.waypoint;
+  if (waypoint) {
+    const mx = Math.max(10, Math.min(mw - 10, w2mX(waypoint.x)));
+    const my = Math.max(20, Math.min(mh - 20, w2mY(waypoint.y)));
+    ctx.save();
+    ctx.strokeStyle = '#7ee8ef'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(mw / 2, mh / 2); ctx.lineTo(mx, my); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#122c38';
+    ctx.beginPath(); ctx.arc(mx, my, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✦', mx, my);
+    ctx.restore();
   }
 
   // ── Player: view cone + heading arrow (never color-only: white ring) ──

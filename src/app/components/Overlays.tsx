@@ -7,6 +7,7 @@ import { CH } from '../../game/core/EventBus.ts';
 import { useGameState } from '../../hooks/useGameState.ts';
 import { questStateSnapshot, setFlag } from '../../game/systems/QuestSystem.ts';
 import { firstSteps } from '../../game/systems/TutorialSystem.ts';
+import { clearWaypoint, navigationSnapshot, setWaypoint } from '../../game/systems/NavigationSystem.ts';
 
 interface FirstStepItem {
   id: string;
@@ -155,7 +156,7 @@ export function Minimap(): JSX.Element {
   const pos = useGameState([CH.PLAYER, CH.WORLD], (): { x?: number; y?: number } => ({
     x: GameState.s?.world?.px, y: GameState.s?.world?.py
   })) as { x?: number; y?: number };
-  void pos;
+  const nav = useGameState([CH.MINIMAP, CH.WORLD], navigationSnapshot);
   const [zoom, setZoom] = useState<number>(uiSession.minimapZoom || 1);
   const [legend, setLegend] = useState<boolean>(false);
   const cycle = (dir: number): void => {
@@ -169,13 +170,24 @@ export function Minimap(): JSX.Element {
     <div className="minimap">
       <div className="mm-tl">✦ Realm</div>
       <div className="minimap-wrap">
-        <canvas id="minimap-canvas" width="480" height="340" />
+        <canvas id="minimap-canvas" width="480" height="340" title="Click to set a waypoint" onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (!rect.width || !rect.height) return;
+          const radius = 2200 / zoom;
+          setWaypoint((pos.x ?? 0) + ((event.clientX - rect.left) / rect.width - 0.5) * radius * 2,
+            (pos.y ?? 0) + ((event.clientY - rect.top) / rect.height - 0.5) * radius * 2);
+        }} />
         <div className="mm-zoom">
           <button onClick={() => setLegend((v) => !v)} title="Toggle legend" aria-label="Toggle legend">?</button>
           <button onClick={() => cycle(-1)} title="Minimap zoom out">−</button>
           <button onClick={() => cycle(1)} title="Minimap zoom in">+</button>
         </div>
       </div>
+      {nav && <div className="navigation-card">
+        <span className="navigation-arrow" aria-hidden="true" style={{ transform: `rotate(${nav.bearing}deg)` }}>↑</span>
+        <div><strong>{nav.label}</strong><small>{nav.direction} · {nav.distance.toLocaleString()} units away</small></div>
+        <button onClick={clearWaypoint} aria-label="Clear waypoint" title="Clear waypoint">×</button>
+      </div>}
       {legend && (
         <div className="mm-legend-box">
           {MM_ICON_LEGEND.map(([g, c, n]) => (

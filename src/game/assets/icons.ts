@@ -11,13 +11,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { ITEMS } from '../data/items.ts';
 import { makeCanvas } from './artCore.ts';
+import { ITEM_ARTWORK, itemArtworkKey } from './itemArtwork.ts';
 import { SHAPES_A } from './iconShapesA.ts';
 import { SHAPES_B } from './iconShapesB.ts';
 import type { IconDrawer } from './iconPrims.ts';
 import type * as Phaser from 'phaser';
 
 /** Cell size for each icon in the atlas (px). */
-const CELL = 26;
+const CELL = 34;
 
 /** Merged drawer map — shape name → (ctx, colour) drawer function. */
 const DRAWERS: Record<string, IconDrawer> = { ...SHAPES_A, ...SHAPES_B };
@@ -58,10 +59,19 @@ export function buildItemIcons(scene: Phaser.Scene): true {
     ctx.save();
     ctx.translate(ox, oy);
     try {
-      const shape: string | undefined = def?.icon?.shape;
-      const drawer: IconDrawer | undefined = shape === undefined ? undefined : DRAWERS[shape];
-      if (!drawer) throw new Error(`no drawer for shape "${def?.icon?.shape}"`);
-      drawer(ctx, def?.icon?.c1 || '#cccccc');
+      const artworkKey = itemArtworkKey(id);
+      if (ITEM_ARTWORK[id] && scene.textures.exists(artworkKey)) {
+        const image = scene.textures.get(artworkKey).getSourceImage() as HTMLImageElement;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(image, 0, 0, CELL, CELL);
+      } else {
+        // Preserve the original 26px drawings, centered at native resolution.
+        ctx.translate((CELL - 26) / 2, (CELL - 26) / 2);
+        const shape: string | undefined = def?.icon?.shape;
+        const drawer: IconDrawer | undefined = shape === undefined ? undefined : DRAWERS[shape];
+        if (!drawer) throw new Error(`no drawer for shape "${def?.icon?.shape}"`);
+        drawer(ctx, def?.icon?.c1 || '#cccccc');
+      }
     } catch (err) {
       console.warn('[icons]', id, err instanceof Error ? err.message : String(err));
     }
@@ -81,6 +91,8 @@ export function buildItemIcons(scene: Phaser.Scene): true {
     iconDataURLs[id] = c2.toDataURL('image/png');
   });
 
+  // CanvasTexture must upload the completed atlas to the GPU, not the blank canvas.
+  tex.refresh();
   return true;
 }
 

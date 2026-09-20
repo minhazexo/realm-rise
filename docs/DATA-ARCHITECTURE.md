@@ -90,6 +90,14 @@ is only allowed to *coordinate*: create → delegate → render. Extracted:
 `LootSystem`, `BuildSystem`, `MinimapSystem`, `SpawnDirector`,
 `InputSystem`, plus `EntityFactory` for construction. See migration plan.
 
+### Session-only navigation
+
+`systems/NavigationSystem.ts` owns waypoint validation, map coordinate conversion,
+compass snapshots and arrival checks. React calls its services; `MinimapSystem`
+updates it at the existing minimap cadence. `CH.MINIMAP` refreshes the map target
+and compass card. The target lives in `GameState.session.waypoint`, resets on new
+game/load, and is never serialized. No save migration is needed.
+
 ## 5. Events
 
 `core/EventBus.js` (`Bus` + `CH` channels). Convention:

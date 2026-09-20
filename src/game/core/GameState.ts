@@ -60,6 +60,8 @@ export type FloatRenderer = (worldX: number, worldY: number, text: string, style
 export interface SessionState {
   uiPanel: string | null; // 'inventory' | 'crafting' | ... | null
   paused: boolean;
+  /** Navigation target is deliberately excluded from saved state. */
+  waypoint?: { x: number; y: number; label: string } | null;
   screen: string; // boot | menu | creation | intro | world
   dialogue: SessionDialogue | null;
   toasts: ToastEntry[];
@@ -106,6 +108,7 @@ class GameStore {
   newGame(seed: number, charOpts: CharOpts = {}, difficulty: DifficultyKey = 'normal'): GameRootState {
     const st: GameRootState = createStateDefaults(seed);
     this.state = st;
+    this.session.waypoint = null;
     if (charOpts.name) st.player.name = charOpts.name;
     Object.assign(st.player.appearance, charOpts.appearance || {});
     if (charOpts.gender) st.player.gender = charOpts.gender;
@@ -154,6 +157,7 @@ class GameStore {
         }
       }
     }
+    this.session.waypoint = null;
     this.session.uiPanel = null;
     this.session.paused = false;
     this.session.dialogue = null;

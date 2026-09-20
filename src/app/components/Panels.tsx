@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, JSX } from 'react';
 import GameState from '../../game/core/GameState.ts';
 import { CH } from '../../game/core/EventBus.ts';
+import { clearWaypoint, mapPoint, MAP_VIEW_RADIUS, setWaypoint } from '../../game/systems/NavigationSystem.ts';
 import { useGameState } from '../../hooks/useGameState.ts';
 import { getItem, RARITY } from '../../game/data/items.ts';
 import { iconDataURLs } from '../../game/assets/icons.ts';
@@ -640,6 +641,7 @@ interface MapPanelData {
 }
 
 function MapPanel(): JSX.Element {
+  const waypoint = useGameState([CH.MINIMAP], () => GameState.session.waypoint ?? null);
   const data = useGameState([CH.WORLD, CH.SETTLEMENT, CH.FACTIONS], () => {
     const S: any = GameState.s;
     const known = new Set<string>(S?.world?.discoveredPois || []);
@@ -670,7 +672,7 @@ function MapPanel(): JSX.Element {
     ctx.setTransform(2, 0, 0, 2, 0, 0);
     const cx: number = data.settlement?.x ?? data.px;
     const cy: number = data.settlement?.y ?? data.py;
-    const viewRadius = 7000;
+    const viewRadius = MAP_VIEW_RADIUS;
     const explored = new Set<string>(data.explored);
     const bg: CanvasGradient = ctx.createLinearGradient(0, 0, 0, LH);
     bg.addColorStop(0, '#0d1322');
@@ -740,6 +742,18 @@ function MapPanel(): JSX.Element {
         ctx.beginPath(); ctx.arc(ux, uy, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
     } catch { /* ignore */ }
+    if (waypoint) {
+      const mx = Math.max(10, Math.min(LW - 10, X(waypoint.x)));
+      const my = Math.max(25, Math.min(LH - 10, Y(waypoint.y)));
+      ctx.save(); ctx.strokeStyle = '#7ee8ef'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(X(data.px), Y(data.py)); ctx.lineTo(mx, my); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = '#122c38';
+      ctx.beginPath(); ctx.arc(mx, my, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✦', mx, my);
+      ctx.restore();
+    }
     // Compass + vignette.
     ctx.fillStyle = '#e8c94b';
     ctx.font = 'bold 13px serif';
@@ -749,11 +763,22 @@ function MapPanel(): JSX.Element {
     vg.addColorStop(1, 'rgba(0,0,0,0.4)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, LW, LH);
-  }, [data]);
+  }, [data, waypoint]);
   return (
     <div className="panel map-panel">
       <h2>World Map</h2>
-      <canvas ref={canvasRef} className="worldmap-canvas" width="1040" height="600" />
+      <p className="map-note">Click the map to chart your next destination, or track a discovered location below.</p>
+      <canvas ref={canvasRef} className="worldmap-canvas" width="1040" height="600" aria-label="World map: click to set waypoint" onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const point = mapPoint((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height,
+          data.settlement?.x ?? data.px, data.settlement?.y ?? data.py);
+        setWaypoint(point.x, point.y);
+      }} />
+      <div className="map-navigation-actions">
+        {waypoint && <><span>✦ {waypoint.label} · {waypoint.x}, {waypoint.y}</span><button onClick={clearWaypoint}>Clear waypoint</button></>}
+        {data.settlement && <button onClick={() => setWaypoint(data.settlement!.x, data.settlement!.y, 'Home')}>⌂ Track home</button>}
+      </div>
       <div className="map-stats">
         <span>🗺 Territory: <b>{data.pct}%</b></span>
         <span>🏕 Camps held: <b>{data.owned}</b></span>
@@ -762,7 +787,7 @@ function MapPanel(): JSX.Element {
       <h3>Discovered ({data.pois.length})</h3>
       <div className="poi-list">
         {data.pois.length === 0 && <em>Explore to reveal the realm…</em>}
-        {data.pois.map((p) => <div key={p.id} className="poi-row"><b>{p.name || p.id}</b> <span>{Math.round(p.x)}, {Math.round(p.y)}</span></div>)}
+        {data.pois.map((p) => <div key={p.id} className="poi-row"><b>{p.name || p.id}</b> <span>{Math.round(p.x)}, {Math.round(p.y)}</span><button onClick={() => setWaypoint(p.x, p.y, p.name || p.id)} aria-label={`Track ${p.name || p.id}`}>Track</button></div>)}
       </div>
       <h3>Factions</h3>
       <div className="poi-list">

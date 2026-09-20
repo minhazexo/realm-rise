@@ -90,6 +90,9 @@ Status of every major feature in the game.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Canvas minimap | ✅ | Terrain colors, POI dots, enemy dots, player marker |
+| Exploration waypoints | ✅ | Click either map; track discovered locations or home; compass bearing/distance, map pin, clear and arrival notification. Session-only; straight-line guidance, not pathfinding. |
+
+Navigation verification: `node tests/navigation-browser.mjs` starts its own Vite server and uses installed Playwright Chromium to check minimap clicks, marker pixels, compass, clear, world-map clicks and arrival. Pure navigation regression coverage runs with `npm test`.
 
 ## Gathering (Fixed) ✅
 

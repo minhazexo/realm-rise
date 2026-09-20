@@ -15,6 +15,7 @@ import Enemy from '../entities/Enemy.ts';
 import BossEnemy from '../entities/BossEnemy.ts';
 import EnvSystem from '../systems/EnvSystem.ts';
 import { buildAllAssets } from '../assets/index.ts';
+import { preloadItemArtwork } from '../assets/itemArtwork.ts';
 import { recompute, awardXP, profXP, addReputation } from '../systems/ProgressionSystem.ts';
 import { addItem } from '../systems/InventorySystem.ts';
 import { refresh as kingdomRefresh, recruitCitizen } from '../systems/KingdomSystem.ts';
@@ -91,6 +92,10 @@ export default class WorldScene extends Phaser.Scene {
     this.saveAcc = 0;
   }
 
+  preload(): void {
+    preloadItemArtwork(this);
+  }
+
   create(): void {
     const S = GameState.s;
     setWorldSeed(S.meta.seed);
@@ -102,6 +107,8 @@ export default class WorldScene extends Phaser.Scene {
     configureSpawning({ Enemy, BossEnemy });
     this.cameras.main.setBounds(-WORLD_CONFIG.worldHalfExtent, -WORLD_CONFIG.worldHalfExtent, WORLD_CONFIG.worldHalfExtent * 2, WORLD_CONFIG.worldHalfExtent * 2);
     this.cameras.main.setBackgroundColor('#141925');
+    // Ensure camera rounds pixel positions to avoid sub-pixel blur on pixel art
+    this.cameras.main.roundPixels = true;
 
     this.chunkGroup = this.add.group();
     this.floats = new Floater(this);
