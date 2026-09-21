@@ -5,7 +5,9 @@ import { Bus, CH } from '../core/EventBus.ts';
 import { PLAYER_CONFIG, DIFFICULTY } from '../core/Constants.ts';
 import { getItem } from '../data/items.ts';
 import { wearEquipped, countItem, removeItem } from '../systems/InventorySystem.ts';
-import { shakeAllowed, shadowsEnabled, isImmortal } from '../systems/SettingsSystem.ts';
+import { shakeAllowed, shadowsEnabled, isImmortal, reducedMotion } from '../systems/SettingsSystem.ts';
+import { notifyPlayerHit } from '../systems/AutoAttackSystem.ts';
+import { applyBreathing } from '../systems/BreathingFX.ts';
 
 type Dir = 'down' | 'up' | 'left' | 'right';
 
@@ -47,6 +49,8 @@ export default class Player {
   comboCount: number;
   comboWindow: number;
   blockStartAt: number;
+  /** Idle-breathing phase accumulator (seconds) — see BreathingFX. */
+  idleBreath = { value: 0 };
   _mv: Phaser.Math.Vector2;
   hitstopTimer: number;
   _dodgeTrailTimer: number;
@@ -201,6 +205,8 @@ export default class Player {
 
   updateWalkAnim(dt: number, moving: boolean): void {
     if (moving) {
+      // Leaving idle: snap scale back to 1 so breathing never carries over.
+      if (this.sprite.scaleY !== 1) this.sprite.setScale(1);
       this.walkTimer += dt;
       const fps: number = PLAYER_CONFIG.walkAnimFps * (((this.sprite.body as Phaser.Physics.Arcade.Body)?.speed || 0) > 240 ? 1.4 : 1);
       if (this.walkTimer >= 1 / fps) {
@@ -231,7 +237,15 @@ export default class Player {
           } catch { /* cosmetic only */ }
         }
       }
-    } else { this.walkPhase = 1; this.sprite.setFrame(`${this.dir}_1`); }
+    } else {
+      this.walkPhase = 1;
+      this.sprite.setFrame(`${this.dir}_1`);
+      // Idle breathing (shared helper): sells "alive" for near-zero cost.
+      // Skipped when blocking, during hitstop, and under reduced motion.
+      if (!this.blocking && this.hitstopTimer <= 0) {
+        applyBreathing(this.sprite, this.idleBreath, dt, 1, 0.55, 0.015);
+      }
+    }
   }
 
   /* ── Attacks (spec §18) ──────────────────────────────────────────────── */
@@ -297,6 +311,18 @@ export default class Player {
       .setAngle(Phaser.Math.RadToDeg(ang) % 360)
       .setVisible(true).setScale(opts.heavy ? 1.25 : 1);
     this.scene.tweens.add({ targets: this.slashFx, angle: '-=80', alpha: 0, duration: 130, onComplete: () => this.slashFx.setVisible(false).setAlpha(1) });
+    // Anticipation: a 50ms squash "backswing" before the arc reads as weight,
+    // not teleport damage. Heavies squash deeper for a distinct feel.
+    try {
+      if (!reducedMotion()) {
+        const squash = opts.heavy ? 0.85 : 0.92;
+        this.sprite.setScale(squash, 1.06);
+        this.scene.tweens.add({
+          targets: this.sprite, scaleX: 1, scaleY: 1,
+          duration: 120, ease: 'Back.easeOut',
+        });
+      }
+    } catch { /* cosmetic only */ }
 
     // ── Weapon style identity: slash / crush / pierce feel different ──
     const style: string = wpn.style || 'slash';
@@ -370,11 +396,16 @@ export default class Player {
   takeDamage(rawDmg: number, srcX?: number | null, srcY?: number | null): number {
     const S = GameState.s, D = S.player.derived || {};
     if (this.iFrames > 0 || S.session_dead) return 0;
-    // Phase B parry: blocking tapped within 150ms of impact = full negate +
-    // stamina reward. Reads as skill, not a stat check.
+    // Auto-attack assist: any landed enemy hit opens a short counter-attack
+    // window on the attacker's position (AutoAttackSystem reads it next tick).
+    notifyPlayerHit(this.scene, srcX);
+    // Parry: blocking tapped within 150ms of impact = full negate, +12
+    // stamina, and a 0.2s attack-cooldown grace so a successful parry flows
+    // straight into a counter.
     const offDef = S.player.equipment.offhand ? getItem(S.player.equipment.offhand.id) : null;
     if (this.blocking && offDef?.shieldBlock && performance.now() - this.blockStartAt < 150 && S.player.stamina > 5) {
-      S.player.stamina = Math.min(D.maxStamina, S.player.stamina + 6);
+      S.player.stamina = Math.min(D.maxStamina, S.player.stamina + 12);
+      this.cool.attack = Math.min(this.cool.attack, 0.2);
       (this.scene as any).fxHit?.(this.sprite.x, this.sprite.y - 20);
       (GameState.session as any).floatRenderer?.(this.sprite.x, this.sprite.y - 44, 'Parried!', '#8fd8ff', 1.2);
       Bus.emit('play-sound', 'parry');

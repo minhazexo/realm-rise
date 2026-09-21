@@ -47,6 +47,10 @@ export interface EnemyPalette {
   rune?: string;
   scars?: string;
   eyes?: string;
+  /** Draw antlers (deer bucks). */
+  antlers?: boolean;
+  /** Slim runner build (deer). */
+  slim?: boolean;
 }
 
 /** Minimal enemy definition fields consumed by {@link buildEnemySheet}. */
@@ -125,7 +129,7 @@ export function buildEnemySheet(scene: Phaser.Scene, key: string, def: EnemyDef)
   // ── Quadrupeds ────────────────────────────────────────────────────────
   const isQuadruped =
     def.sheetKey.startsWith('en_') &&
-    ['wolf', 'boar', 'bear'].some((k) => def.key.includes(k));
+    ['wolf', 'boar', 'bear', 'deer'].some((k) => def.key.includes(k));
 
   if (isQuadruped) {
     return makeQuadrupedSheet(scene, def.sheetKey, {
@@ -135,6 +139,8 @@ export function buildEnemySheet(scene: Phaser.Scene, key: string, def: EnemyDef)
       tusks: def.key === 'boar',
       scars: pal.scars,
       eyes: pal.eyes,
+      antlers: pal.antlers === true,
+      slim: pal.slim === true,
     });
   }
 

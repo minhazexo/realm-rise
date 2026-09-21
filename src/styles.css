@@ -352,7 +352,7 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 
 /* Minimap */
 .minimap {
-  position: absolute; top: 110px; right: 12px; width: 180px; height: 126px;
+  position: absolute; top: 110px; right: 12px; width: 180px; height: auto;
   background: rgba(8,12,18,0.9); border: 1px solid rgba(180,150,80,0.3);
   border-radius: 8px; z-index: 3; overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
@@ -502,6 +502,19 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 .mm-legend { display: flex; gap: 8px; flex-wrap: wrap; font-size: 10px; color: var(--parch-dim); }
 .mm-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
 .minimap-wrap { position: relative; }
+.navigation-card { display: flex; align-items: center; gap: 8px; padding: 9px; border-top: 1px solid #385963; background: linear-gradient(120deg, #152c35, #101620); }
+.navigation-arrow { display: inline-block; flex: 0 0 20px; text-align: center; color: #7ee8ef; font-size: 24px; }
+.navigation-card > div { min-width: 0; flex: 1; }
+.navigation-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--parch); }
+.navigation-card small { display: block; font-size: 10px; color: #a5cbd0; }
+.navigation-card button { flex-shrink: 0; background: transparent; color: var(--parch); border: 0; cursor: pointer; padding: 5px; }
+.worldmap-canvas { width: 100%; height: auto; display: block; cursor: crosshair; border-radius: 6px; }
+#minimap-canvas { cursor: crosshair; }
+.map-navigation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; margin: 10px 0; color: #a5cbd0; }
+.map-navigation-actions button, .map-panel .poi-row button { background: #152c35; border: 1px solid #385963; border-radius: 5px; color: var(--parch); cursor: pointer; padding: 5px 9px; }
+.map-panel .poi-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 6px 0; }
+.map-panel .poi-row b { flex: 1; }
+.mm-legend-box { padding: 8px; font-size: 11px; display: grid; gap: 3px; }
 .mm-zoom { position: absolute; bottom: 2px; right: 2px; display: flex; gap: 2px; }
 .mm-zoom button { width: 18px; height: 18px; font-size: 11px; line-height: 1; padding: 0;
   background: rgba(20,28,38,0.85); border: 1px solid rgba(180,150,80,0.35); color: var(--parch);
@@ -614,7 +627,7 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
   .hud-bottom { padding-left: 0; }
   .panel { width: 92%; right: 4px; max-height: 70vh; }
   .quest-tracker { width: 92%; left: 4px; top: 12px; max-height: 45vh; }
-  .minimap { top: 12px; right: 4px; width: 140px; height: 98px; }
+  .minimap { top: 12px; right: 4px; width: 160px; height: auto; }
   .hotbar { padding: 6px; gap: 4px; }
   .hotbar-btn { width: 30px; height: 30px; font-size: 10px; }
   .hb-key { display: none; }

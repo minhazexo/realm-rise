@@ -71,9 +71,17 @@ export function raidTick(scene: RaidScene): boolean {
   const home: { x: number; y: number } | null = S.settlement.pos;
   if (!home) return false;
   const ang: number = Math.random() * Math.PI * 2;
-  const dist: number = 480 + Math.random() * 160;
-  for (const key of party) {
-    const e: RaidEnemy | null = scene.spawnEnemy(key, home.x + Math.cos(ang) * dist, home.y + Math.sin(ang) * dist);
+  // Raiders arrive as
+  // a column — staggered depths along the approach axis — instead of one
+  // simultaneous ring. Reads as a marching party and staggers aggro.
+  for (let i = 0; i < party.length; i++) {
+    const key: string = party[i] as string;
+    const depth: number = Math.floor(i / 2) * 46;       // two abreast
+    const lateral: number = (i % 2 === 0 ? -1 : 1) * 26; // ±26px file offset
+    const dist: number = 480 + depth + Math.random() * 30;
+    const ex: number = home.x + Math.cos(ang) * dist + Math.cos(ang + Math.PI / 2) * lateral;
+    const ey: number = home.y + Math.sin(ang) * dist + Math.sin(ang + Math.PI / 2) * lateral;
+    const e: RaidEnemy | null = scene.spawnEnemy(key, ex, ey);
     if (e) e.raider = true;
   }
   scene._raidCd = S.meta.playSeconds + 300 + Math.random() * 240;

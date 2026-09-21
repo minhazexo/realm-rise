@@ -106,6 +106,26 @@ export function refreshDynamicLights(scene: DynLightScene): void {
     }
     const flicker = 1 + 0.12 * Math.sin(now / 140 + (entry.phase || 0));
     entry.sprite.setScale(def.scale * flicker * dayDim);
+    // Day dimming must also fade the glow — scale alone left a full-bright
+    // fire core hovering in the noon sun.
+    entry.sprite.setAlpha(0.4 + 0.6 * dayDim);
+  }
+}
+
+/**
+ * Per-frame position sync for player-following lights (the held torch).
+ * The structural refresh above only runs on a slow cadence — without this
+ * the torch glow visibly trailed the player and snapped every ~30 frames.
+ */
+export function followPlayerLights(scene: DynLightScene, x: number, y: number): void {
+  const dynLights = scene._dynLights;
+  if (!dynLights) return;
+  for (const [key, entry] of dynLights) {
+    if (key.startsWith('player:')) {
+      entry.sprite.setPosition(x, y - 4);
+      entry.def.x = x;
+      entry.def.y = y - 4;
+    }
   }
 }
 

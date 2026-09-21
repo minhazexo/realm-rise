@@ -170,7 +170,7 @@ export function rr(
   w: number,
   h: number,
   r: number,
-  fill: string | null,
+  fill: string | CanvasGradient | null,
   stroke: string | null = OUTLINE,
 ): void {
   r = Math.min(r ?? 0, w / 2, h / 2);
@@ -205,7 +205,7 @@ export function circ(
   x: number,
   y: number,
   r: number,
-  fill: string | null,
+  fill: string | CanvasGradient | null,
   stroke: string | null = OUTLINE,
   lw: number = 1.4,
 ): void {

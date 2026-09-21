@@ -120,6 +120,18 @@ export function createResource(scene: ResourceScene, type: string, x: number, y:
   const img = scene.add.image(x, y, depleted ? (def.emptyTex || def.tex) : def.tex).setDepth(Math.round(y));
   if (def.tint) img.setTint(def.tint);
   if (def.solid) img.setName('solid-' + def.solid);
+  // Deterministic per-node variety — same tree/rock reads differently by
+  // position (scale/occasional mirror) without breaking reproducible saves.
+  const hx = Math.imul(x | 0, 0x9e3779b1) ^ Math.imul(y | 0, 0x85ebca77);
+  const r1 = ((Math.imul(hx, 0x27d4eb2d) >>> 0) % 1000) / 1000;
+  const r2 = ((Math.imul(hx ^ 0xa11, 0x2545f491) >>> 0) % 1000) / 1000;
+  if (/oak|pine|birch|dead_tree|cactus/.test(type)) {
+    if (typeof img.setScale === 'function') img.setScale(0.82 + r1 * 0.4);
+    if (typeof img.setFlipX === 'function' && r2 > 0.74) img.setFlipX(true);
+  } else if (/rock|ore|crystal|moonstone/.test(type)) {
+    if (typeof img.setScale === 'function') img.setScale(0.82 + r1 * 0.34);
+    if (typeof img.setFlipX === 'function' && r2 > 0.88) img.setFlipX(true);
+  }
   const solidHp: number = def.solid ? (Array.isArray(def.solid) ? def.solid[0] : def.solid) : 1;
   const node: GatherNode = {
     uid: `n${nodeUidSeq++}`, type, x, y, def, img, stateKey,

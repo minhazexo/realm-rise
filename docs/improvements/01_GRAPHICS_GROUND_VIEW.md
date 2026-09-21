@@ -42,6 +42,13 @@
 - Parallax dust/pollen as **world-space** particles (`scrollFactor 1`) instead of screen-space.
 - Ground emissive layer (volcanic cracks, crystals) with bloom pickup via `PostFXSystem.pulse()`.
 
+### Done in Quality Pass 2 — living grass overlay (`systems/GrassField.ts`)
+- **150 procedural two-tone blades** (dark base → yellow-green tip, 3 green casts) on a shared 160×64 canvas, stamped over the ground by world-anchored tileSprite slabs. Uniform-random scatter (a step grid banded into visible stripes — caught on screenshot) and 3×3 wrap-copies so slabs tile seamlessly.
+- **Wind:** per-slab `tilePositionX` sine ripple (one blit per slab); amplitude = weather (storm 9px … heat 2px) × time-of-day (golden hour stronger, night calm). No tweens — deterministic, reduced-motion freezes.
+- **Trample:** slab under the player flattens (tileScaleY 0.86, alpha dip) and springs back over 0.45s via a dt-lerped progress value — deliberately tween-free so wind/trample can never fight over the same properties (the audit's tween-fight class).
+- **Coverage:** world-anchored lattice keys (camera-relative keys drifted and spawned 3,855 duplicate slabs — caught live), hide/revive with a 240-tile parked pool, ≤3 slab builds/frame.
+- Verdant biomes only; particles 'off' removes it; verified live in `tests/browser-e2e.mjs` feature checks.
+
 ## 4. Acceptance checks
 - Duplicate chunk side-by-side ×3 — no visible seam.
 - Grayscale screenshot — biome boundaries still readable by value.

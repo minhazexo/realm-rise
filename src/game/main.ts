@@ -37,16 +37,15 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
   // Phaser-specific render keys (subPixel / mipmap) that this Phaser build
   // accepts at runtime; the intersection keeps them legal in the config.
   const render: Phaser.Types.Core.RenderConfig & Record<string, unknown> = {
-    antialias: true,
-    pixelArt: false,
-    roundPixels: false,
-    // Sub-pixel rendering on the GPU for sharper, smoother visuals.
-    subPixel: true,
+    // Pixel-art crispness: nearest-neighbour filtering, no sub-pixel blur
+    antialias: false,
+    pixelArt: true,
+    roundPixels: true,
+    subPixel: false,
     // PowerPreference: prefer high-performance GPU for shader effects.
     powerPreference: 'high-performance',
-    // Enable the WebGL pipeline's mipmap generation for textures so
-    // distant chunks sample the right LOD.
-    mipmap: true
+    // Disable mipmaps — they blur pixel art when the camera zooms.
+    mipmap: false
   };
   // The `& Record<string, unknown>` intersection keeps Phaser-specific keys
   // (pipeline) legal without weakening the config type.

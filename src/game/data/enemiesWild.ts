@@ -59,6 +59,10 @@ export interface EnemyDef {
   chargeDist?: number;
   chargeSpeedMult?: number;
   cowardly?: boolean;
+  /** HP fraction below which the enemy breaks off and flees (0 = never). */
+  fleeBelowHpPct?: number;
+  /** Prey animal: never attacks, flees the moment the player is detected. */
+  prey?: boolean;
   nightOnly?: boolean;
   phases?: EnemyPhase[];
 }
@@ -94,10 +98,23 @@ export const ENEMIES: Record<string, EnemyDef> = {
   bear: {
     key: 'bear', name: 'Cave Bear', sheetKey: 'en_bear', scale: 1.45, team: ENEMY_TEAMS.wild,
     hp: 160, atk: 20, def: 6, speed: 118, detect: 280, attackRange: 44, attackCd: 1.6,
-    windupSec: 0.6, radius: 22, xp: 60,
+    // xp 60→85 — a bear
+    // was poor risk/reward vs ~4 wolves of equal total HP; guaranteed pelts.
+    windupSec: 0.6, radius: 22, xp: 85,
     style: 'brute',
     palette: { fur: '#59452f', belly: '#7c6549' },
-    loot: [ { id: 'raw_meat', chance: 1, min: 3, max: 5 }, { id: 'fur_pelt', chance: 0.85, min: 2, max: 3 }, { id: 'bear_charm_amulet', chance: 0.08, min: 1, max: 1 } ],
+    loot: [ { id: 'raw_meat', chance: 1, min: 3, max: 5 }, { id: 'fur_pelt', chance: 1, min: 2, max: 3 }, { id: 'bear_charm_amulet', chance: 0.08, min: 1, max: 1 } ],
+    goldDrop: 0
+  },
+  deer: {
+    key: 'deer', name: 'Red Deer', sheetKey: 'en_deer', scale: 1, team: ENEMY_TEAMS.wild,
+    hp: 34, atk: 0, def: 0, speed: 178, detect: 300, attackRange: 0, attackCd: 999,
+    windupSec: 0.3, radius: 12, xp: 10,
+    style: 'melee', prey: true,
+    // theHunter-style prey: spots the player early, bolts with a slim build
+    // and long legs, never fights. Hunting loop feeds raw_meat + hides.
+    palette: { fur: '#a5794f', belly: '#eadfc8', antlers: true, slim: true },
+    loot: [ { id: 'raw_meat', chance: 0.9, min: 1, max: 3 }, { id: 'leather_hide', chance: 0.6, min: 1, max: 2 } ],
     goldDrop: 0
   },
   goblin: {
@@ -105,6 +122,9 @@ export const ENEMIES: Record<string, EnemyDef> = {
     hp: 30, atk: 7, def: 1, speed: 142, detect: 260, attackRange: 30, attackCd: 0.95,
     windupSec: 0.28, radius: 12, xp: 18,
     style: 'melee', cowardly: true,
+    // cowardly maps to the engine's flee threshold — goblins break off and
+    // run below 35% HP (was data-only before; engine reads fleeBelowHpPct).
+    fleeBelowHpPct: 0.35,
     palette: { skin: '#69a052', cloth: '#7a4e31' },
     loot: [ { id: 'flint', chance: 0.6, min: 1, max: 2 }, { id: 'gold_nugget', chance: 0.12, min: 1, max: 1 }, { id: 'mushrooms', chance: 0.4, min: 1, max: 2 } ],
     goldDrop: 6

@@ -17,8 +17,9 @@ import GameState from '../core/GameState.ts';
 import { collectWantedLights } from './DynamicLights.ts';
 
 const TEX_KEY = 'night_mask';
-const MASK_W = 480;
-const MASK_H = 270;
+/** Mask canvas is half the game-canvas size (capped) — uniform downscale, so light holes stay circular at any aspect ratio. The old fixed 480×270 was stretched 0.92× horizontally but 2.9× vertically on portrait canvases, squaring light holes into tall ellipses. */
+const MASK_SCALE = 0.5;
+const MASK_MAX_W = 512;
 
 /** Minimal scene surface consumed by the night mask. */
 export type NightScene = Phaser.Scene & {
@@ -37,10 +38,26 @@ function nightAmount(t: number): number {
   return 1;
 }
 
+function maskDims(scene: NightScene): { w: number; h: number } {
+  const w: number = scene.scale.width || 480;
+  const mw: number = Math.min(Math.max(160, Math.round(w * MASK_SCALE)), MASK_MAX_W);
+  const mh: number = Math.max(120, Math.round(mw * (scene.scale.height || 320) / w));
+  return { w: mw, h: mh };
+}
+
 function ensureMask(scene: NightScene): Phaser.Textures.CanvasTexture | null {
-  if (scene.textures.exists(TEX_KEY)) return scene.textures.get(TEX_KEY) as Phaser.Textures.CanvasTexture;
+  const { w, h } = maskDims(scene);
+  if (scene.textures.exists(TEX_KEY)) {
+    const tex = scene.textures.get(TEX_KEY) as Phaser.Textures.CanvasTexture;
+    // Window resized? Rebuild the canvas so the aspect stays exact.
+    if (tex.width !== w || tex.height !== h) {
+      scene.textures.remove(TEX_KEY);
+    } else {
+      return tex;
+    }
+  }
   if (typeof document === 'undefined') return null;
-  const tex: Phaser.Textures.CanvasTexture | null = scene.textures.createCanvas(TEX_KEY, MASK_W, MASK_H);
+  const tex: Phaser.Textures.CanvasTexture | null = scene.textures.createCanvas(TEX_KEY, w, h);
   if (!tex) return null;
   if (!scene._nightMaskImg) {
     scene._nightMaskImg = scene.add.image(0, 0, TEX_KEY)
@@ -68,24 +85,26 @@ export function updateNightMask(scene: NightScene): void {
 
   const w: number = scene.scale.width, h: number = scene.scale.height;
   const img: Phaser.GameObjects.Image = scene._nightMaskImg;
-  img.setDisplaySize(w, h);
   if (night <= 0.02) {
     img.setVisible(false);
     return;
   }
   img.setVisible(true);
+  // The mask texture is a uniform downscale of the game canvas, so a plain
+  // displaySize covers the view exactly at any camera zoom.
+  img.setDisplaySize(w, h);
 
   const ctx: CanvasRenderingContext2D = tex.getContext();
   const cam: Phaser.Cameras.Scene2D.Camera = scene.cameras.main;
   const viewX: number = cam.worldView?.x ?? cam.scrollX;
   const viewY: number = cam.worldView?.y ?? cam.scrollY;
-  const sx: number = MASK_W / w, sy: number = MASK_H / h;
+  const sx: number = tex.width / w, sy: number = tex.height / h;
   const toMask = (wx: number, wy: number): [number, number] => [(wx - viewX) * sx, (wy - viewY) * sy];
 
   ctx.globalCompositeOperation = 'source-over';
-  ctx.clearRect(0, 0, MASK_W, MASK_H);
-  ctx.fillStyle = `rgba(6,10,24,${(0.72 * night).toFixed(3)})`;
-  ctx.fillRect(0, 0, MASK_W, MASK_H);
+  ctx.clearRect(0, 0, tex.width, tex.height);
+  ctx.fillStyle = `rgba(6,10,24,${(0.78 * night).toFixed(3)})`;
+  ctx.fillRect(0, 0, tex.width, tex.height);
 
   // Punch holes: destination-out radial gradients (soft falloff).
   ctx.globalCompositeOperation = 'destination-out';
@@ -102,8 +121,11 @@ export function updateNightMask(scene: NightScene): void {
   };
 
   // Player sight radius — smaller without a torch (torch matters at night).
+  // Scaled to the view: a fixed 190px radius swallowed 86% of a narrow
+  // viewport, so night read as a flat wash with no lit pool at all.
   const hasTorch: boolean = /torch/i.test(S.player.equipment?.offhand?.id || '');
-  const sightWorld: number = hasTorch ? 300 : 190;
+  const viewSpan: number = Math.hypot(cam.worldView.width, cam.worldView.height);
+  const sightWorld: number = Math.max(130, viewSpan * (hasTorch ? 0.42 : 0.3));
   const [pmx, pmy] = toMask(player.x, player.y);
   hole(pmx, pmy, sightWorld * sx);
 
@@ -112,7 +134,7 @@ export function updateNightMask(scene: NightScene): void {
     for (const [, def] of collectWantedLights()) {
       const [mx, my] = toMask(def.x, def.y);
       // Cull far off-screen lights.
-      if (mx < -120 || my < -120 || mx > MASK_W + 120 || my > MASK_H + 120) continue;
+      if (mx < -120 || my < -120 || mx > tex.width + 120 || my > tex.height + 120) continue;
       hole(mx, my, (def.scale || 1.5) * 70 * sx);
     }
   } catch { /* lights unavailable — sight hole still applies */ }

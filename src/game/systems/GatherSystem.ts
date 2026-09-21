@@ -79,6 +79,14 @@ export function updateGatherProximity(scene: GatherScene, px: number, py: number
   GameState.session.nearNode = nearest;
 }
 
+/** Per-hit chip/spark tint by yielded resource id (fallback wood brown). */
+const RES_TINT: Record<string, number> = {
+  wood: 0x9a7b4f, hardwood: 0x6e5433, stone: 0xb9bfc9, flint: 0xd8dee8,
+  iron_ore: 0xc98d64, coal: 0x4a4a52, silver: 0xe8eef2, gold_nugget: 0xf2c14e,
+  crystal: 0x9be3e0, moonstone: 0xbfd4ff, berries: 0xc05a6a, mushrooms: 0xd8c9a8,
+  herbs: 0x8fc46a, fiber: 0xa8c47a, clay: 0xc98d64,
+};
+
 /** One gather swing against the session's near node (tool check + damage). */
 export function doGather(scene: GatherScene): void {
   const n: GatherNode | null = GameState.session.nearNode;
@@ -98,6 +106,7 @@ export function doGather(scene: GatherScene): void {
   if (!toolOk) { scene.floats.add(n.x, n.y - 30, `Need ${needed}`, '#ff9a7a'); return; }
 
   n.hp -= 1;
+  const def: NodeTypeDef = n.def;
   Bus.emit('play-sound', !needed ? 'pickup' : needed === 'pick' ? 'mine' : 'chop');
   if (n.hp <= 0) breakNode(scene, n, mult);
   else {
@@ -105,6 +114,29 @@ export function doGather(scene: GatherScene): void {
     const left = Math.max(1, n.hp);
     scene.floats.add(n.x, n.y - 30, left > 1 ? `${left}` : '…', '#ffe9c9', 0.9);
     scene.onMeleeImpact(n.x, n.y, false);
+    // Per-hit resource chips:
+    // 3-particle burst tinted by the yielded resource, not just on break.
+    try {
+      if (scene.textures.exists('fx_spark') || scene.textures.exists('fx_hitflash')) {
+        const tex: string = scene.textures.exists('fx_spark') ? 'fx_spark' : 'fx_hitflash';
+        const tint: number = RES_TINT[def.yRes] ?? 0x9a7b4f;
+        for (let i = 0; i < 3; i++) {
+          const chip = scene.add.image(n.x + (Math.random() - 0.5) * 14, n.y - 6 + (Math.random() - 0.5) * 10, tex)
+            .setDepth((n.img?.depth ?? 10) + 1)
+            .setScale(0.28 + Math.random() * 0.2)
+            .setTint(tint)
+            .setAlpha(0.85);
+          scene.tweens.add({
+            targets: chip,
+            x: chip.x + (Math.random() - 0.5) * 30,
+            y: chip.y - 14 + Math.random() * 22,
+            alpha: 0, scale: 0.1,
+            duration: 320, ease: 'Quad.easeOut',
+            onComplete: () => { try { chip.destroy(); } catch { /* gone */ } },
+          });
+        }
+      }
+    } catch { /* cosmetic only */ }
     try {
       if (n.img && n.img.scene) {
         scene.tweens.add({ targets: n.img, x: n.x + 2, duration: 45, yoyo: true, repeat: 1, onComplete: () => n.img?.setPosition(n.x, n.y) });

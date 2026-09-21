@@ -1,3 +1,4 @@
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AmbientParticles (spec §63 — "fireflies, falling leaves, environmental
 // animation"):
@@ -9,13 +10,13 @@
 //   * Birds — silhouettes that fly across the sky occasionally
 //   * Mist — slow drifting rolls in valleys at dawn / dusk
 //
-// All emitters follow the player (scrollFactor=0) so the player never
-// outruns them. Throttled via the same particleMultiplier used by other
-// particle systems so a single quality knob scales everything.
+// Pollen and leaves spawn in the camera's world bounds; existing particles
+// stay anchored while the camera moves. Birds and mist remain sky overlays.
+// Quality changes rebuild emitters; reduced motion disables ambient movement.
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
 import { biomeAt } from '../world/worldGen.ts';
-import { particleMultiplier } from './SettingsSystem.ts';
+import { particleMultiplier, reducedMotion } from './SettingsSystem.ts';
 
 type Emitter = Phaser.GameObjects.Particles.ParticleEmitter;
 
@@ -28,6 +29,38 @@ let _lastSpawnBirdAt = 0;
 let _birdEmitter: Emitter | null = null;
 let _pollenEmitter: Emitter | null = null;
 let _mistEmitter: Emitter | null = null;
+let _leafEmitter: Emitter | null = null;
+let _leafQuality = 0;
+
+/** Emitter stays at world origin: only NEW particles sample camera bounds. */
+function updateLeaves(scene: AmbientScene, biome: string, mult: number): void {
+  const wooded = biome === 'forest' || biome === 'swamp' || biome === 'riverlands';
+  if (!wooded || reducedMotion() || mult === 0 || mult !== _leafQuality) {
+    _leafEmitter?.destroy();
+    _leafEmitter = null;
+  }
+  _leafQuality = mult;
+  if (!wooded || reducedMotion() || mult === 0 || _leafEmitter || !scene.textures.exists('pt_leaf')) return;
+  _leafEmitter = scene.add.particles(0, 0, 'pt_leaf', {
+    x: { onEmit: () => {
+      const view = scene.cameras.main.worldView;
+      return view.x + Math.random() * view.width;
+    } },
+    y: { onEmit: () => {
+      const view = scene.cameras.main.worldView;
+      return view.y + Math.random() * view.height;
+    } },
+    lifespan: { min: 3500, max: 6000 },
+    speedX: { min: 8, max: 22 },
+    speedY: { min: 12, max: 26 },
+    rotate: { min: -180, max: 180 },
+    scale: { start: 0.65, end: 0.25 },
+    alpha: { start: 0.65, end: 0 },
+    quantity: 1,
+    frequency: Math.round(450 / mult),
+    maxParticles: Math.ceil(16 * mult)
+  }).setDepth(3600).setScrollFactor(1);
+}
 
 function ensureBird(scene: AmbientScene): Emitter | null {
   if (_birdEmitter || !scene.textures.exists('menu_bird_f1')) return null;
@@ -38,7 +71,8 @@ function ensureBird(scene: AmbientScene): Emitter | null {
     speedX: { min: 30, max: 60 },
     speedY: { min: -2, max: 2 },
     quantity: 1,
-    frequency: 4000,
+    frequency: -1,
+    maxParticles: 6,
     scale: 0.8,
     alpha: 0.7
   }).setDepth(3000).setScrollFactor(0);
@@ -49,8 +83,8 @@ function ensurePollen(scene: AmbientScene, biome: string): Emitter | null {
   if (_pollenEmitter) return _pollenEmitter;
   if (!scene.textures.exists('pt_spark')) return null;
   _pollenEmitter = scene.add.particles(0, 0, 'pt_spark', {
-    x: { min: 0, max: scene.scale.width },
-    y: { min: 0, max: scene.scale.height },
+    x: { onEmit: () => scene.cameras.main.worldView.x + Math.random() * scene.cameras.main.worldView.width },
+    y: { onEmit: () => scene.cameras.main.worldView.y + Math.random() * scene.cameras.main.worldView.height },
     lifespan: { min: 4000, max: 8000 },
     speedX: { min: -8, max: 8 },
     speedY: { min: -12, max: -3 },
@@ -59,7 +93,7 @@ function ensurePollen(scene: AmbientScene, biome: string): Emitter | null {
     quantity: 1,
     frequency: biome === 'desert' || biome === 'frozen' ? 1500 : 400,
     tint: biome === 'desert' ? 0xf5e0b0 : biome === 'frozen' ? 0xe8f0ff : 0xfff0b8
-  }).setDepth(3600).setScrollFactor(0).setBlendMode('ADD');
+  }).setDepth(3600).setScrollFactor(1).setBlendMode('ADD');
   return _pollenEmitter;
 }
 
@@ -89,11 +123,8 @@ function ensureMist(scene: AmbientScene): Emitter | null {
 export function updateAmbientParticles(scene: AmbientScene, time: number, dt: number): void {
   void dt;
   const mult: number = particleMultiplier();
-  if (mult === 0) {
-    // Quality = off. Tear down any active emitters.
-    _birdEmitter?.destroy(); _birdEmitter = null;
-    _pollenEmitter?.destroy(); _pollenEmitter = null;
-    _mistEmitter?.destroy(); _mistEmitter = null;
+  if (mult === 0 || reducedMotion()) {
+    destroyAmbientParticles();
     return;
   }
 
@@ -103,6 +134,7 @@ export function updateAmbientParticles(scene: AmbientScene, time: number, dt: nu
 
   // 1. Pollen / dust motes (day only, always on except in extreme biomes)
   const biome: string = biomeAt(scene.player?.sprite?.x || 0, scene.player?.sprite?.y || 0);
+  updateLeaves(scene, biome, mult);
   const wantPollen = !isNight && mult > 0.35 && biome !== 'frozen';
   if (wantPollen) ensurePollen(scene, biome);
   else if (_pollenEmitter) {
@@ -120,9 +152,8 @@ export function updateAmbientParticles(scene: AmbientScene, time: number, dt: nu
   if (!isNight && mult > 0.5 && time - _lastSpawnBirdAt > 9000 && scene.textures.exists('menu_bird_f1')) {
     ensureBird(scene);
     if (_birdEmitter) {
-      _birdEmitter.explode(scene.scale.width + 100,
-        20 + Math.random() * scene.scale.height * 0.25,
-        Math.max(1, Math.round(mult * 3)));
+      _birdEmitter.explode(Math.max(1, Math.round(mult * 3)),
+        -30, 20 + Math.random() * scene.scale.height * 0.25);
       _lastSpawnBirdAt = time;
     }
   }
@@ -130,6 +161,9 @@ export function updateAmbientParticles(scene: AmbientScene, time: number, dt: nu
 
 /** Tear down everything on scene shutdown. */
 export function destroyAmbientParticles(): void {
+  _leafEmitter?.destroy(); _leafEmitter = null;
+  _leafQuality = 0;
+  _lastSpawnBirdAt = 0;
   _birdEmitter?.destroy(); _birdEmitter = null;
   _pollenEmitter?.destroy(); _pollenEmitter = null;
   _mistEmitter?.destroy(); _mistEmitter = null;

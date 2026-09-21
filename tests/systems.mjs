@@ -276,5 +276,49 @@ S().player.hp = 3;
 healToFull();
 ok(S().player.hp === S().player.derived.maxHp, 'healToFull restores max HP');
 
+// Session-only navigation: coordinates, bearings, arrival and save isolation.
+const Nav = await import('../src/game/systems/NavigationSystem.ts');
+const { Bus, CH } = await import('../src/game/core/EventBus.ts');
+const { WORLD_CONFIG } = await import('../src/game/core/Constants.ts');
+S().world.px = 0; S().world.py = 0;
+Nav.clearWaypoint();
+ok(Nav.navigationSnapshot() === null, 'navigation starts without a target');
+ok(!Nav.setWaypoint(NaN, 2) && !Nav.setWaypoint(1, Infinity), 'invalid coordinates rejected');
+ok(Nav.setWaypoint(300, 400, ' Test destination '), 'waypoint accepted');
+let nav = Nav.navigationSnapshot();
+ok(nav.distance === 500 && nav.direction === 'SE' && nav.label === 'Test destination', 'distance, direction and trimmed label');
+const targetBeforeInvalid = GameState.session.waypoint;
+ok(!Nav.setWaypoint(Infinity, 0) && GameState.session.waypoint === targetBeforeInvalid, 'invalid target preserves current target');
+for (const [x, y, direction, bearing] of [[0,-500,'N',0],[500,0,'E',90],[0,500,'S',180],[-500,0,'W',270]]) {
+  Nav.setWaypoint(x, y);
+  nav = Nav.navigationSnapshot();
+  ok(nav.direction === direction && nav.bearing === bearing, `compass points ${direction}`);
+}
+Nav.setWaypoint(1e9, -1e9);
+ok(GameState.session.waypoint.x === WORLD_CONFIG.worldHalfExtent && GameState.session.waypoint.y === -WORLD_CONFIG.worldHalfExtent, 'targets clamped to world bounds');
+const center = Nav.mapPoint(0.5, 0.5, 100, -200);
+const corner = Nav.mapPoint(1, 0, 100, -200);
+ok(center.x === 100 && center.y === -200, 'map center maps to world center');
+ok(corner.x === 100 + Nav.MAP_VIEW_RADIUS && corner.y === -200 - Nav.MAP_VIEW_RADIUS, 'map conversion preserves axis orientation');
+Nav.setWaypoint(500, 0, 'Arrival test');
+ok(!JSON.stringify(serialize(S())).includes('Arrival test'), 'waypoint excluded from save payload');
+let arrivals = 0;
+const stopArrival = Bus.on(CH.TOAST, (t) => { if (t.title === 'Destination reached') arrivals++; });
+Nav.updateNavigation(0, 0);
+ok(Nav.navigationSnapshot() !== null && arrivals === 0, 'distant target stays active');
+Nav.updateNavigation(500 - Nav.ARRIVAL_RADIUS, 0);
+Nav.updateNavigation(500, 0);
+ok(Nav.navigationSnapshot() === null && arrivals === 1, 'arrival clears target and notifies exactly once');
+stopArrival();
+Nav.setWaypoint(500, 0);
+Nav.clearWaypoint();
+ok(Nav.navigationSnapshot() === null, 'manual clear removes target');
+Nav.setWaypoint(500, 0);
+GameState.load(serialize(S()));
+ok(Nav.navigationSnapshot() === null, 'loading resets navigation');
+Nav.setWaypoint(500, 0);
+GameState.newGame(1337);
+ok(Nav.navigationSnapshot() === null, 'new game resets navigation');
+
 console.log(fails === 0 ? '✅ INTEGRATION PASS — systems layer healthy.' : `❌ ${fails} integration failure(s)`);
 process.exit(fails ? 1 : 0);

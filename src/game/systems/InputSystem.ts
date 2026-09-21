@@ -225,7 +225,15 @@ export function togglePanel(scene: InputScene, name: string): void {
 /* ── Camera zoom (wheel / +/- / Z/X / HUD buttons / settings slider) ── */
 export function applyCamZoom(scene: InputScene): number {
   const raw = Number(getSetting('camZoom') ?? 1);
-  const z = Math.max(0.6, Math.min(2, Number.isFinite(raw) ? raw : 1));
+  const base = Math.max(0.6, Math.min(2, Number.isFinite(raw) ? raw : 1));
+  // Combat bias: zoom out ~4%
+  // during combat so melee arcs and incoming enemies stay in frame. The
+  // player's chosen baseline is always the anchor — combat only biases it.
+  const combat = GameState.session.inCombat === true;
+  const target = combat ? base * 0.96 : base;
+  const cur = scene.cameras.main.zoom || base;
+  const next = cur + (target - cur) * 0.08; // smooth lerp, no snap
+  const z = Math.abs(next - target) < 0.001 ? target : next;
   try { scene.cameras.main.setZoom(z); } catch { /* headless */ }
   return z;
 }

@@ -206,6 +206,12 @@ export default function SettingsPanel({ onBack }: SettingsPanelProps): JSX.Eleme
           />
         </Row>
         <Toggle label="Auto-save" hint="Save your progress automatically every few minutes." checked={s.autosave !== false} onChange={(v) => onScalar('autosave', v)} />
+        <Toggle
+          label="Auto-attack when attacked"
+          hint="The character automatically swings back when enemies attack or close to melee range. Nice for comfort play; off for full manual control."
+          checked={s.toggles.autoAttack !== false}
+          onChange={(v) => onT('autoAttack', v)}
+ />
         {s.autosave !== false && (
           <Row label="Auto-save every" hint="Time between automatic saves (seconds).">
             <Slider
