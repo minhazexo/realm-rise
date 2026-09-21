@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
 import { WORLD_CONFIG } from '../core/Constants.ts';
-import { biomeAt } from '../world/worldGen.ts';
+import { biomeAt, isWaterAt } from '../world/worldGen.ts';
 import { rollNodeType, rollEnemyKey } from '../world/nodeTypes.ts';
 import { BIOMES } from '../world/biomeTable.ts';
 import { configureEntities, createEnemy, createResource } from './EntityFactory.ts';
@@ -53,6 +53,7 @@ export function populateChunk(scene: Phaser.Scene, cx: number, cy: number): void
     const nx: number = oX + hash(cx * 7 + i * 13, cy * 3 + i * 7) * cs;
     const ny: number = oY + hash(cx * 11 + i * 29, cy * 17 + i * 5) * cs;
     if (nx * nx + ny * ny > WORLD_CONFIG.worldHalfExtent ** 2) continue;
+    if (isWaterAt(nx, ny)) continue; // no trees in lakes
     const type: string | null = rollNodeType(biomeId, hash(cx * 31 + i, cy * 41 + i));
     if (!type) continue;
     // persist depletion via poiStates-by-hash key
@@ -70,7 +71,19 @@ export function populateChunk(scene: Phaser.Scene, cx: number, cy: number): void
   const distFromHome: number = home ? Math.hypot(oX + cs / 2 - home.x, oY + cs / 2 - home.y) : Infinity;
   if (enemyR < 0.12 && distFromSpawn > 900 && distFromHome > 700) {
     const key: string | null = rollEnemy(biomeId, hash(cx * 13 + 3, cy * 5 + 9));
-    if (key) spawnEnemy(scene, key, oX + cs / 2, oY + cs / 2);
+    if (key && !isWaterAt(oX + cs / 2, oY + cs / 2)) {
+      // Prey spawns as a small herd (deer are social; lone deer read as bugs).
+      if (key === 'deer') {
+        const herd: number = 2 + Math.floor(hash(cx * 3, cy * 9) * 3); // 2–4
+        for (let i = 0; i < herd; i++) {
+          const hx: number = oX + cs / 2 + (hash(cx + i, cy) - 0.5) * 160;
+          const hy: number = oY + cs / 2 + (hash(cx, cy + i) - 0.5) * 160;
+          if (!isWaterAt(hx, hy)) spawnEnemy(scene, key, hx, hy);
+        }
+      } else {
+        spawnEnemy(scene, key, oX + cs / 2, oY + cs / 2);
+      }
+    }
   }
 }
 

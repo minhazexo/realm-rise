@@ -36,7 +36,7 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { WORLD_CONFIG } from '../core/Constants.ts';
-import { biomeAt } from '../world/worldGen.ts';
+import { biomeAt, isWaterAt } from '../world/worldGen.ts';
 import { reducedMotion } from './SettingsSystem.ts';
 
 const TILE_W = 160;
@@ -63,6 +63,23 @@ const TRAMPLE_OUT = 0.45;
 const HIDDEN_CAP = 240;
 /** Non-green biomes: no overlay. */
 const BARREN = ['frozen', 'desert', 'mountains', 'volcanic'];
+/**
+ * Water sampling for a slab: 5 points (centre + 4 at 70% half-extent).
+ * ≥3 water → no grass (a lake is not a meadow); 1–2 water → shoreline
+ * slab, faded so blades thin out toward the water instead of stopping
+ * on a hard grid line.
+ */
+function waterScore(sx: number, sy: number): number {
+  const dx = TILE_W * 0.35, dy = TILE_H * 0.35;
+  const pts: Array<[number, number]> = [
+    [sx, sy],
+    [sx - dx, sy - dy], [sx + dx, sy - dy],
+    [sx - dx, sy + dy], [sx + dx, sy + dy]
+  ];
+  let wet = 0;
+  for (const [x, y] of pts) if (isWaterAt(x, y)) wet++;
+  return wet;
+}
 
 /** Wind amplitude (px of texture ripple) per weather id. */
 const WEATHER_AMP: Record<string, number> = {
@@ -76,6 +93,7 @@ interface Slab {
   sy: number;
   phase: number;      // wind ripple phase offset
   trample: number;    // 0 = upright … 1 = fully flattened
+  baseAlpha: number;  // 0.8 inland, faded on shoreline slabs
 }
 
 type GrassScene = Phaser.Scene & { player?: { sprite?: { x: number; y: number } } };
@@ -181,6 +199,13 @@ export default class GrassField {
   private spawnSlab(sx: number, sy: number): void {
     const key = `${sx},${sy}`;
     if (this.slabs.has(key)) return; // already covered
+    // Grass never grows in water: skip wet cells outright, fade shore cells.
+    const wet = waterScore(sx, sy);
+    if (wet >= 3) {
+      const stale = this.hidden.get(key);
+      if (stale) { stale.tile.destroy(); this.hidden.delete(key); }
+      return;
+    }
     const hid = this.hidden.get(key);
     if (hid) {
       this.hidden.delete(key);
@@ -188,15 +213,17 @@ export default class GrassField {
       this.slabs.set(key, hid);
       return;
     }
+    const baseAlpha = wet > 0 ? 0.8 - 0.28 * wet : 0.8;
     const tile = this.scene.add.tileSprite(sx, sy, TILE_W, TILE_H, TEX_KEY)
       .setOrigin(0.5)
       // Just above the ground images (depth −worldHalf*2), below everything else.
       .setDepth(-WORLD_CONFIG.worldHalfExtent * 2 + 1)
-      .setAlpha(0.8);
+      .setAlpha(baseAlpha);
     this.slabs.set(key, {
       tile, sx, sy,
       phase: (sx * 0.017 + sy * 0.031) % (Math.PI * 2), // spatially coherent phase
-      trample: 0
+      trample: 0,
+      baseAlpha
     });
   }
 
@@ -323,7 +350,7 @@ export default class GrassField {
 
   /** Restore a parked slab to service. */
   private revive(slab: Slab): void {
-    slab.tile.setVisible(true).setAlpha(0.8).setTileScale(1, 1);
+    slab.tile.setVisible(true).setAlpha(slab.baseAlpha).setTileScale(1, 1);
     slab.trample = 0;
   }
 
@@ -344,7 +371,7 @@ export default class GrassField {
         : Math.max(0, slab.trample - step);
       const k = slab.trample;
       slab.tile.setTileScale(1, 1 - 0.14 * k);
-      slab.tile.setAlpha(0.8 - 0.18 * k);
+      slab.tile.setAlpha(slab.baseAlpha - 0.18 * k);
     }
   }
 

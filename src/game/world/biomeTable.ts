@@ -88,7 +88,8 @@ export const BIOMES: Record<string, BiomeEntry> = {
       { type: 'reed', weight: 2 },
     ],
     enemies: [
-      { key: 'boar', w: 6 },
+      { key: 'deer', w: 5 },
+      { key: 'boar', w: 5 },
       { key: 'bandit_scout', w: 4 },
       { key: 'wolf', w: 4 },
     ],
@@ -113,6 +114,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
       { type: 'fiber', weight: 4 },
     ],
     enemies: [
+      { key: 'deer', w: 4 },
       { key: 'wolf', w: 8 },
       { key: 'boar', w: 4 },
       { key: 'goblin', w: 3 },

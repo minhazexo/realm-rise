@@ -61,6 +61,8 @@ export interface EnemyDef {
   cowardly?: boolean;
   /** HP fraction below which the enemy breaks off and flees (0 = never). */
   fleeBelowHpPct?: number;
+  /** Prey animal: never attacks, flees the moment the player is detected. */
+  prey?: boolean;
   nightOnly?: boolean;
   phases?: EnemyPhase[];
 }
@@ -102,6 +104,17 @@ export const ENEMIES: Record<string, EnemyDef> = {
     style: 'brute',
     palette: { fur: '#59452f', belly: '#7c6549' },
     loot: [ { id: 'raw_meat', chance: 1, min: 3, max: 5 }, { id: 'fur_pelt', chance: 1, min: 2, max: 3 }, { id: 'bear_charm_amulet', chance: 0.08, min: 1, max: 1 } ],
+    goldDrop: 0
+  },
+  deer: {
+    key: 'deer', name: 'Red Deer', sheetKey: 'en_deer', scale: 1, team: ENEMY_TEAMS.wild,
+    hp: 34, atk: 0, def: 0, speed: 178, detect: 300, attackRange: 0, attackCd: 999,
+    windupSec: 0.3, radius: 12, xp: 10,
+    style: 'melee', prey: true,
+    // theHunter-style prey: spots the player early, bolts with a slim build
+    // and long legs, never fights. Hunting loop feeds raw_meat + hides.
+    palette: { fur: '#a5794f', belly: '#eadfc8', antlers: true, slim: true },
+    loot: [ { id: 'raw_meat', chance: 0.9, min: 1, max: 3 }, { id: 'leather_hide', chance: 0.6, min: 1, max: 2 } ],
     goldDrop: 0
   },
   goblin: {

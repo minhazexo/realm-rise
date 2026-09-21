@@ -215,6 +215,13 @@ export default class Enemy {
       case STATE.DETECT:
         this.stateTimer -= dt;
         this.faceTarget(p.sprite);
+        // Prey (deer) freeze for the telegraph beat, then bolt — they never
+        // escalate to CHASE (theHunter-style: prey flees on detection).
+        if (this.def.prey) {
+          this.sprite.setTint(0xfff2c9);
+          if (this.stateTimer <= 0) { this.state = STATE.RETREAT; this.sprite.clearTint(); }
+          break;
+        }
         this.sprite.setTint(0xffd08a);
         if (d > detect * 1.5 && !this.boss) { this.state = STATE.IDLE; this.sprite.clearTint(); break; }
         if (this.stateTimer <= 0) { this.state = STATE.CHASE; this.sprite.setTint(0xff9a6a); }
@@ -286,7 +293,13 @@ export default class Enemy {
         break;
       case STATE.RETREAT:
         this.moveAway(p.sprite.x, p.sprite.y, this.atkSpd * 1.1, dt);
-        if (this.hp > this.maxHp * (this.fleeUnderHpPct + 0.12) || d > detect) { this.state = STATE.SEARCH; this.stateTimer = 4; }
+        // Prey calms down only when well clear of the threat; wounded
+        // animals stop fleeing once they recover past the flee threshold.
+        if (this.def.prey) {
+          if (d > detect * 2.2) { this.state = STATE.SEARCH; this.stateTimer = 3; }
+        } else if (this.hp > this.maxHp * (this.fleeUnderHpPct + 0.12) || d > detect) {
+          this.state = STATE.SEARCH; this.stateTimer = 4;
+        }
         break;
       case STATE.SEARCH:
         this.stateTimer -= dt;
@@ -339,8 +352,9 @@ export default class Enemy {
 
   enterChase(): void {
     // Phase B: DETECT telegraph — 0.35s "!" warning before the chase, so
-    // aggro never feels instant (Lane-1 readability).
-    if (this.state === STATE.DETECT || this.state === STATE.CHASE) return;
+    // aggro never feels instant (Lane-1 readability). Prey keep the beat:
+    // their DETECT state resolves to RETREAT instead of CHASE.
+    if (this.state === STATE.DETECT || this.state === STATE.CHASE || this.state === STATE.RETREAT) return;
     this.state = STATE.DETECT;
     this.stateTimer = 0.35;
     this.sprite.setTint(0xffd08a);
@@ -363,12 +377,17 @@ export default class Enemy {
   }
 
   syncAnim(dt: number): void {
-    const moving: boolean = ((this.sprite.body as Phaser.Physics.Arcade.Body | null)?.velocity.lengthSq() ?? 0) > 400;
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body | null;
+    const speed = body?.velocity.length() ?? 0;
+    const moving = speed > 20;
     if (moving) {
       // Leaving idle: snap scale back so breathing never carries over.
       if (this.sprite.scaleY !== this.scale) this.sprite.setScale(this.scale);
+      // Stride rate scales with actual speed (a sprinting boar churns
+      // legs ~2× faster than a trotting bear), clamped to sane step rates.
       this._walkTimer += dt;
-      if (this._walkTimer > 0.13) {
+      const stride = Math.max(0.07, Math.min(0.22, 14 / Math.max(60, speed)));
+      if (this._walkTimer > stride) {
         this._walkTimer = 0;
         this.walkPhase = (this.walkPhase + 1) % 3;
       }
@@ -386,7 +405,7 @@ export default class Enemy {
 
   tryAttack(p: any): void {
     const def = this.def;
-    if (this.attackCd > 0) return;
+    if (this.attackCd > 0 || def.prey) return; // prey never strike back
     this.attackCd = def.attackCd;
     this.windingUp = true;
     Bus.emit('play-sound', 'sword');

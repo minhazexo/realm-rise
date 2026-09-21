@@ -58,6 +58,10 @@ export interface QuadrupedSheetCfg {
   scars?: string | null;
   /** Eye colour (defaults to OUTLINE). */
   eyes?: string | null;
+  /** Draw antlers (deer bucks). */
+  antlers?: boolean;
+  /** Slim runner build: narrower body, longer legs (deer). */
+  slim?: boolean;
 }
 
 /**
@@ -74,6 +78,10 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
   const fur   = cfg.fur   || '#7a7060';
   const belly = cfg.belly || '#b3aa97';
   const bulk  = cfg.bulk  || 1;
+  const slim  = cfg.slim ? 1 : 0;
+  const bodyRx = (BODY_RX - 2.2 * slim) * bulk;
+  const bodyRy = (BODY_RY - 1.1 * slim) * bulk;
+  const legLen0 = LEG_BASE_LEN + 3.5 * slim;
 
   DIR_ROWS.forEach((dir, row) => {
     for (let p = 0; p < 3; p++) {
@@ -81,6 +89,8 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
       const oy = row * QUAD_H;
       const stepA = p === 1 ? 3 : p === 2 ? -3 : 0;
       const flip = dir === 'right' ? -1 : 1;
+      // Walk bob: torso rises mid-stride, settles on the pass-through frame.
+      const bobY = p === 1 ? -1.1 : p === 2 ? 0.5 : 0;
 
       ctx.save();
 
@@ -91,31 +101,61 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
       }
 
       const bx = ox + QUAD_W / 2; // body centre X
-      const by = oy + QUAD_H / 2; // body centre Y
+      const by = oy + QUAD_H / 2 + bobY; // body centre Y (bobbed)
 
       // ── Ground shadow ─────────────────────────────────────────────────
       ell(ctx, bx, oy + QUAD_H - 3, SHADOW_RX, SHADOW_RY, 'rgba(0,0,0,0.18)', null);
 
       // ── Legs ──────────────────────────────────────────────────────────
       ctx.fillStyle = shade(fur, -24);
-      LEG_POSITIONS.forEach(([lx, i]) => {
-        const legLen = LEG_BASE_LEN + (i ? stepA : -stepA);
+      // Front/back views use symmetric leg pairs; side views keep the offset set.
+      const strideLegs: Array<[number, number]> = (dir === 'down' || dir === 'up')
+        ? [[-8, 0], [-5, 1], [5, 0], [8, 1]]
+        : LEG_POSITIONS;
+      strideLegs.forEach(([lx, i]) => {
+        const legLen = legLen0 + (i ? stepA : -stepA);
         ctx.fillRect(bx + lx * flip, by + 4, LEG_W, legLen);
       });
 
       // ── Body ──────────────────────────────────────────────────────────
-      ell(ctx, bx, by, BODY_RX * bulk, BODY_RY * bulk, fur, OUTLINE, 0);
+      ell(ctx, bx, by, bodyRx, bodyRy, fur, OUTLINE, 0);
       // belly highlight
       ell(ctx, bx, by + 2.6, 9, 3.6, belly, null);
 
       // ── Tail ──────────────────────────────────────────────────────────
       ctx.strokeStyle = fur; ctx.lineWidth = 3.4;
-      ctx.beginPath();
-      ctx.moveTo(bx - 11 * flip, by - 2);
-      ctx.quadraticCurveTo(bx - 16 * flip, by - 5 + stepA, bx - TAIL_LEN * flip, by - 8 + stepA * 0.6);
-      ctx.stroke();
+      if (dir === 'up') {
+        // Rear view: tail hangs down the centre of the rump.
+        ctx.beginPath();
+        ctx.moveTo(bx, by - bodyRy * 0.4);
+        ctx.quadraticCurveTo(bx + (p - 1) * 1.5, by + 2, bx + (p - 1) * 2.5, by + bodyRy + 3);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(bx - 11 * flip, by - 2);
+        ctx.quadraticCurveTo(bx - 16 * flip, by - 5 + stepA, bx - TAIL_LEN * flip, by - 8 + stepA * 0.6);
+        ctx.stroke();
+      }
 
-      // ── Head ──────────────────────────────────────────────────────────
+      // ── Head ──────────────────────────────────────────────────────
+      if (dir === 'up') {
+        // Rear view: head hidden behind the body — only ears (and antlers
+        // for bucks) peek over the back. No face, no eyes.
+        ctx.fillStyle = shade(fur, -14);
+        tri(ctx, bx - 5, by - bodyRy - 4, EAR_SIZE, shade(fur, -14));
+        tri(ctx, bx + 1.5, by - bodyRy - 4, EAR_SIZE, shade(fur, -14));
+        if (cfg.antlers) {
+          ctx.strokeStyle = '#6b5233'; ctx.lineWidth = 1.6;
+          for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(bx + s * 3, by - bodyRy - 6);
+            ctx.lineTo(bx + s * 5, by - bodyRy - 11);
+            ctx.moveTo(bx + s * 4.2, by - bodyRy - 8.5);
+            ctx.lineTo(bx + s * 7, by - bodyRy - 10);
+            ctx.stroke();
+          }
+        }
+      } else {
       const hx = bx + HEAD_OFFSET_X * flip;
       const hy = by + HEAD_OFFSET_Y;
       circ(ctx, hx, hy, HEAD_R * bulk, fur, OUTLINE);
@@ -158,6 +198,29 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
         ctx.closePath();
         ctx.fill();
       }
+
+        // ── Antlers (deer bucks, side/front views) ────────────────────
+        if (cfg.antlers) {
+          ctx.strokeStyle = '#6b5233'; ctx.lineWidth = 1.6;
+          if (dir === 'down') {
+            for (const s of [-1, 1]) {
+              ctx.beginPath();
+              ctx.moveTo(hx + s * 3, hy - 5);
+              ctx.lineTo(hx + s * 5, hy - 10);
+              ctx.moveTo(hx + s * 4.2, hy - 7.5);
+              ctx.lineTo(hx + s * 7, hy - 9);
+              ctx.stroke();
+            }
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(hx - 1 * flip, hy - 5);
+            ctx.lineTo(hx - 3 * flip, hy - 11);
+            ctx.moveTo(hx - 2 * flip, hy - 8);
+            ctx.lineTo(hx - 5 * flip, hy - 9.5);
+            ctx.stroke();
+          }
+        }
+      } // end front/side head branch
 
       // ── Alpha scars ───────────────────────────────────────────────────
       if (cfg.scars) {

@@ -31,7 +31,7 @@ import PostFXSystem from '../systems/PostFXSystem.ts';
 import {
   applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
 } from '../world/chunkPainter.ts';
-import { refreshDynamicLights } from '../systems/DynamicLights.ts';
+import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
 import * as lootSys from '../systems/LootSystem.ts';
 import * as buildSys from '../systems/BuildSystem.ts';
 import * as minimapSys from '../systems/MinimapSystem.ts';
@@ -291,6 +291,9 @@ export default class WorldScene extends Phaser.Scene {
 
     // Refresh dynamic point lights (campfires, torches) — slow cadence.
     if (this._frame % 30 === 0) refreshDynamicLights(this);
+    // Player-following lights (held torch) glide every frame — the slow
+    // structural refresh alone made the glow trail and snap behind sprinting.
+    followPlayerLights(this, px, py);
 
     // Update animated water overlay
     if (this.waterSystem) {
