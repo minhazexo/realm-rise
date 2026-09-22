@@ -37,10 +37,11 @@ const {
   ASHEN_SUBREGIONS, ASHEN_LANDMARKS, ASHEN_ENCOUNTERS, ASHEN_INTERACTABLES,
   ASHEN_PUZZLE, ASHEN_SAFE_ZONE, ASHEN_POIS,
   subregionAt, inSafeZone, encounterTriggers, encountersToTrigger,
-  puzzleStep, encounterEnemyCount,
+  encounterEnemyCount,
   forestBands, corridorDistance, FOREST_CORRIDOR, FOREST_BG_CLEARANCE, FOREST_FG_REACH,
   FOREST_DEEP_WOOD_MAX_Y,
 } = await import('../src/game/data/regionAshen.ts');
+const { puzzleStep, stationsOf } = await import('../src/game/data/region.ts');
 const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { SIDE_QUESTS } = await import('../src/game/data/questsSide.ts');
 const { getItem } = await import('../src/game/data/items.ts');
@@ -351,7 +352,7 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
   const GameState = (await import('../src/game/core/GameState.ts')).default;
   GameState.newGame(20260922, { name: 'Ash', gender: 'f', personality: 'kind' }, 'normal');
 
-  const stations = region.regionStations();
+  const stations = stationsOf(region.ASHEN_REGION);
   const forge = stations.find((s) => s.station === 'forge');
   ok(!!forge, 'the region provides a forge station of its own');
   ok(!isWaterAt(forge.x, forge.y), 'the anvil stands on dry ground');
@@ -400,6 +401,77 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
   ok(!!plate && plate.compare && plate.compare.slot === 'chest', 'armor rows carry an equipped comparison');
   ok(plate.compare.armorDelta != null || plate.compare.note === 'Nothing equipped',
      'the armor comparison states either the delta or why there is none');
+}
+
+// ── 11. The region's seams: one data module, one registration ───────────
+// RegionSystem was split along its responsibilities, so the region DATA is the
+// only input: the layout math is pure (runs here in node, no Phaser), and a
+// second region is a data module plus one line in the registry.
+{
+  const layout = await import('../src/game/systems/RegionLayout.ts');
+  const registry = await import('../src/game/systems/RegionRegistry.ts');
+  const region = await import('../src/game/data/regionAshen.ts');
+  const def = region.ASHEN_REGION;
+
+  // The def hands over the authored arrays — never a second copy of the level.
+  ok(def.subregions === region.ASHEN_SUBREGIONS && def.landmarks === region.ASHEN_LANDMARKS,
+     'the region def hands over the authored arrays, not copies');
+  ok(def.encounters === region.ASHEN_ENCOUNTERS && def.interactables === region.ASHEN_INTERACTABLES,
+     'encounters and interactables come from the same authored lists');
+  ok(def.subregionAt(SPAWN.x, SPAWN.y)?.id === 'village', "the def carries the region's own geometry helpers");
+  ok(registry.REGIONS.length === 1 && registry.REGIONS[0].id === def.id, 'the region is registered once');
+
+  // Depth bands, pinned to the four-layer composition the brief asks for.
+  const bgD = layout.propDepth({ tex: 't', dx: 0, dy: 0, band: 'bg' }, 120);
+  const fgD = layout.propDepth({ tex: 't', dx: 0, dy: 0, band: 'fg' }, 120);
+  const midD = layout.propDepth({ tex: 't', dx: 0, dy: 0 }, 123.4);
+  const decalD = layout.propDepth({ tex: 't', dx: 0, dy: 0, decal: true }, 120);
+  ok(bgD === layout.BACKGROUND_DEPTH && bgD < midD, 'background foliage sorts behind the gameplay band');
+  ok(fgD === layout.FOREGROUND_DEPTH && fgD > midD, 'foreground foliage sorts in front of the player');
+  ok(decalD === 4 && decalD > bgD, 'ground decals stay flat above the deep background band');
+  ok(midD === 123, 'the gameplay band is y-sorted by prop position');
+  const ys = region.ASHEN_LANDMARKS.flatMap((l) => l.props.filter((p) => !p.decal && !p.band).map((p) => l.y + p.dy));
+  ok(fgD > Math.max(...ys) && bgD < Math.min(...ys), 'the two bands bracket every y-sorted prop in the region');
+
+  // Streaming: radius-bounded, and an area is only ever built once.
+  const areas = [{ id: 'near', x: 100, y: 0 }, { id: 'far', x: layout.PLACE_RADIUS + 400, y: 0 }];
+  const built = new Set();
+  ok(layout.areasToPlace(areas, built, 0, 0).map((a) => a.id).join() === 'near',
+     `only areas inside the ${layout.PLACE_RADIUS}-unit radius stream in`);
+  built.add('near');
+  ok(layout.areasToPlace(areas, built, 0, 0).length === 0, 'an area that is already built is never rebuilt');
+  ok(layout.areasToPlace(region.ASHEN_SUBREGIONS, new Set(), SPAWN.x, SPAWN.y).some((a) => a.id === 'village'),
+     'the player spawn streams the village in');
+
+  // Encounter seating: one seat per authored enemy, inside the spread.
+  const enc = region.ASHEN_ENCOUNTERS.find((e) => e.members.length > 1) ?? region.ASHEN_ENCOUNTERS[0];
+  const authored = enc.members.reduce((n, m) => n + m.count, 0);
+  let seed = 7;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const plan = layout.encounterPlan(enc, rand);
+  ok(plan.length === authored, `'${enc.id}' seats one enemy per authored member (${plan.length})`);
+  ok(plan.every((s) => Math.hypot(s.x - enc.x, s.y - enc.y) <= enc.spread), 'every seat lands inside the encounter spread');
+  ok(plan.every((s) => enc.members.some((m) => m.key === s.key && m.role === s.role)),
+     'each seat carries an authored enemy key and role');
+  ok(JSON.stringify(layout.encounterPlan(enc, () => 0.5)) === JSON.stringify(layout.encounterPlan(enc, () => 0.5)),
+     'seating is deterministic for a given random source');
+  const roles = new Set(region.ASHEN_ENCOUNTERS.flatMap((e) => e.members.map((m) => m.role)));
+  ok([...roles].every((r) => r in layout.ROLE_TUNING), 'every authored role has tuning');
+
+  // The foreground fade rule: a real overlap, eased, never overshooting.
+  const near = { x: 0, y: 0, hw: 40, hh: 30 };
+  ok(layout.isBehind(0, 0, near) && layout.isBehind(0, 40, near), 'the fade covers the hero standing behind the prop');
+  ok(!layout.isBehind(41, 0, near) && !layout.isBehind(0, 47, near), 'a hero clear of the prop is not faded');
+  const step = layout.fadeAlpha(1, layout.FOREGROUND_FADED_ALPHA, 0.016);
+  ok(step < 1 && step > layout.FOREGROUND_FADED_ALPHA, 'the fade eases toward the floor without jumping');
+  ok(Math.abs(layout.fadeAlpha(1, layout.FOREGROUND_FADED_ALPHA, 1) - layout.FOREGROUND_FADED_ALPHA) < 1e-9,
+     'a long frame still lands exactly on the target alpha');
+
+  // What the scene and the world generator actually consume.
+  ok(registry.regionStations().some((s) => s.station === 'forge'), "the registry publishes the region's stations");
+  ok(registry.inRegionSafeZone(SPAWN.x, SPAWN.y) && !registry.inRegionSafeZone(760, -420),
+     'the registry answers the safe zone the spawn director needs');
+  ok(registry.regionPois().length === region.ASHEN_POIS.length, 'the registry publishes the authored POIs');
 }
 
 console.log(`ashen-frontier: ${passed} passed, ${failed} failed`);

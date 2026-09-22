@@ -33,7 +33,7 @@ import {
 } from '../world/chunkPainter.ts';
 import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
 import { placeRegion, updateRegion, regionSnapshot } from '../systems/RegionSystem.ts';
-import { regionStations } from '../data/regionAshen.ts';
+import { regionStations } from '../systems/RegionRegistry.ts';
 
 /** Projectile tint per element (magic bolts). Falls back to arcane blue. */
 const ELEMENT_TINT: Record<string, number> = {

@@ -140,3 +140,26 @@ tests.
   make the camp's difficulty authored instead of rolled.
 - The tower's summit reward and the shrine's offering are chests, not yet a
   distinct "you climbed somewhere the map didn't need you to" moment.
+
+## 7. Region architecture (where each piece lives)
+
+The scene-side work was split along its responsibilities, so the region DATA is
+the only input and a second region touches no system code:
+
+| Module | Owns |
+| --- | --- |
+| `data/region.ts` | The vocabulary every region shares (`RegionDef`, prop/landmark/encounter/interactable/hazard/puzzle types), `stationsOf()`, the sequence-puzzle rule. Pure. |
+| `data/regionAshen.ts` | The Ashen Frontier itself: areas, landmarks, encounters, interactables, hazards, puzzle, NPCs, POIs, and its geometry helpers — bundled as `ASHEN_REGION`. Pure data. |
+| `systems/RegionRegistry.ts` | The registered regions list, and the three aggregates systems consume (`regionStations`, `inRegionSafeZone`, `regionPois`). |
+| `systems/RegionSystem.ts` | The region lifecycle only: lazy streaming, area building (landmarks, glow, NPCs, ambience) and the frame order. Public entry points `placeRegion` / `updateRegion` / `regionSnapshot`. |
+| `systems/RegionForeground.ts` | The near-camera band: registers foreground props, runs the player-aware fade (owns `foreground`). |
+| `systems/RegionInteractables.ts` | Clickables and their behaviours, including the station rule (owns `interactPlaced`, `puzzle`). |
+| `systems/RegionEncounters.ts` | Designed fights: seating, role tuning, alarms (owns `members`, `alarmed`). |
+| `systems/RegionArena.ts` | Hazard anchors and ticks, and the boss aftermath (owns `bossSeen`). |
+| `systems/RegionLayout.ts` | Pure placement and cadence math: depth bands, streaming radius, encounter seats, role tuning, fade rule. Phaser-free → node-testable. |
+| `systems/RegionState.ts` | The one creator of the per-scene runtime, the `RegionHost` scene surface, and the persisted-progress helpers. |
+
+**Adding a region**: author `data/regionX.ts` exporting a `RegionDef` (its own
+coordinates, names and pure helpers) and add one line to `REGIONS` in
+`RegionRegistry.ts`. Nothing else changes — streaming, banding, interactables,
+fights, hazards and the arena aftermath all iterate the registry.

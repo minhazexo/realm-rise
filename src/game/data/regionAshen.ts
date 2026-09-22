@@ -9,183 +9,13 @@
 // the POIs fed into worldGen so discovery, minimap fog and quests all work.
 //
 // Pure data + pure helpers: no Phaser import, so it is unit-testable and the
-// scene-side placement lives in systems/RegionSystem.ts.
+// scene-side work lives in systems/RegionSystem.ts and its siblings. The shapes
+// below come from data/region.ts, the vocabulary every region shares.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** One prop in a landmark's composition, offset from the landmark centre. */
-export interface PropSpec {
-  /** Texture key (existing world props or propsAshen.ts decals). */
-  tex: string;
-  dx: number;
-  dy: number;
-  scale?: number;
-  flip?: boolean;
-  /** Radians; used for toppled trees, leaning signs. */
-  rot?: number;
-  tint?: number;
-  /** Collision box [w, h] — omit for decals and walk-over dressing. */
-  solid?: [number, number];
-  /** Draw below actors (decals) instead of y-sorted with them. */
-  decal?: boolean;
-  /** Opacity override (depth-banded foliage sits back a little). */
-  alpha?: number;
-  /**
-   * Depth band (map brief §7, the Whispering Forest composition):
-   *   'bg' — the deep wood: canopy and understory BEHIND the walkable band,
-   *          authored clear of the path so it never sits where you walk
-   *   'fg' — near-camera foliage IN FRONT of the player, placed ON the path so
-   *          it passes over the hero (RegionSystem fades what you are behind)
-   * Omitted = the gameplay band: y-sorted with actors, the layer you fight in.
-   */
-  band?: 'bg' | 'fg';
-}
-
-/** A named point of interest the player learns to navigate by. */
-export interface Landmark {
-  id: string;
-  /** Owner sub-region id. */
-  area: string;
-  label: string;
-  x: number;
-  y: number;
-  /** What happened here — surfaced as discovery/lore text. */
-  story: string;
-  props: PropSpec[];
-  /** Optional ambient light (torch/brazier/crystal glow). */
-  glow?: { color: number; radius: number };
-}
-
-/** A named sub-area with its own ambience and gameplay character. */
-export interface SubRegion {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  radius: number;
-  /** 'hub' | 'road' | 'forest' | 'ruin' | 'corrupted' | 'camp' | 'arena' | 'secret' */
-  kind: string;
-  ambience: AmbienceSpec;
-  /** Audio mood key (see AudioSystem.setRegionMood). */
-  mood: string;
-  /** Enemies suppressed inside this radius (safe hub). */
-  safe?: boolean;
-}
-
-export interface AmbienceSpec {
-  /** 'smoke' | 'motes' | 'ash' | 'embers' | 'mist' | 'flies' | 'none' */
-  type: string;
-  /** Particles per second (already low — atmosphere, not confetti). */
-  rate: number;
-  tint: number[];
-  /** Vertical drift bias. */
-  drift?: number;
-}
-
-export type EncounterRole = 'patrol' | 'guard' | 'idle' | 'leader' | 'ambush';
-
-/** One member of a designed encounter. */
-export interface EncounterMember {
-  key: string;
-  count: number;
-  role: EncounterRole;
-}
-
-/** A hand-placed fight: it has a reason to exist, and space to fight in. */
-export interface Encounter {
-  id: string;
-  area: string;
-  label: string;
-  x: number;
-  y: number;
-  /** Members spawn within this radius, not on top of each other. */
-  spread: number;
-  /** Player must come this close to trigger it. */
-  trigger: number;
-  members: EncounterMember[];
-  /** Ambushers stay hidden until the trigger fires, then charge. */
-  ambush?: boolean;
-  /** One-shot per save (no respawn farming of the same designed fight). */
-  oneShot?: boolean;
-  /** Guards that hear the alarm converge on whoever started the fight. */
-  alarm?: boolean;
-  /** Toast shown when the fight starts. */
-  intro?: string;
-}
-
-/** Clickable world object (pointer-based, matching the chest/NPC convention). */
-export interface Interactable {
-  id: string;
-  area: string;
-  kind: 'chest' | 'savepoint' | 'lore' | 'crystal' | 'hostage' | 'station';
-  label: string;
-  x: number;
-  y: number;
-  tex: string;
-  scale?: number;
-  tint?: number;
-  /** Chest tier (see CHEST_POOLS) for kind 'chest'. */
-  tier?: string;
-  /** Lore body for kind 'lore' / 'hostage'. */
-  text?: string;
-  /** Flags written when used. */
-  flag?: string;
-  /** Crystal id for the puzzle sequence. */
-  crystal?: string;
-  /**
-   * Crafting station this object provides (kind 'station'): the region's own
-   * source of the same station a settlement building grants, so the hub works
-   * without a settlement. See BuildSystem.setAuthoredStations.
-   */
-  station?: string;
-  /** Spawn only after this flag is set. */
-  requiresFlag?: string;
-}
-
-/** Environmental damage/atmosphere zone. */
-export interface Hazard {
-  id: string;
-  area: string;
-  kind: 'corruption' | 'fire';
-  x: number;
-  y: number;
-  radius: number;
-  /** Damage per second while standing inside. */
-  dps: number;
-  /** Only lethal while this boss is alive (arena vents). */
-  bossKey?: string;
-  label: string;
-}
-
-/** The corrupted hollow's three-crystal sequence puzzle. */
-export interface Puzzle {
-  id: string;
-  area: string;
-  /** Correct activation order (crystal ids). */
-  sequence: string[];
-  /** Toast while in progress / wording. */
-  prompt: string;
-  /** Flags + rewards on success. */
-  flag: string;
-  rewardTier: string;
-  rewardItem: string;
-  failText: string;
-  doneText: string;
-}
-
-/** POI fed into worldGen → discovery, markers, minimap fog, quests. */
-export interface RegionPoi {
-  id: string;
-  x: number;
-  y: number;
-  kind: string;
-  label: string;
-  tag: string;
-  danger: number;
-  chestTier?: string;
-  npc?: string;
-  /** Key of the boss that holds this POI (the arena's spawn point). */
-  boss?: string;
-}
+import type {
+  Encounter, Hazard, Interactable, Landmark, PropSpec, Puzzle, RegionDef,
+  RegionNpc, RegionPoi, SubRegion,
+} from './region.ts';
 
 // ── Sub-areas ───────────────────────────────────────────────────────────────
 // Laid out around the spawn point (0, 260): a dense ~2 km frontier, not an
@@ -234,6 +64,12 @@ export const ASHEN_SUBREGIONS: SubRegion[] = [
 
 /** No enemy spawns inside this radius of the village centre (the safe hub). */
 export const ASHEN_SAFE_ZONE = { x: -90, y: 330, radius: 470 };
+
+/** The hub's NPCs — offsets from their area's landmark, placed with the area. */
+export const ASHEN_NPCS: RegionNpc[] = [
+  { key: 'mara', area: 'village', dx: 26, dy: 400 },
+  { key: 'corvin', area: 'village', dx: -196, dy: 400 },
+];
 
 // ── Landmarks ───────────────────────────────────────────────────────────────
 // Built from the shipped prop library + propsAshen decals, so the region keeps
@@ -822,7 +658,7 @@ export const ASHEN_POIS: RegionPoi[] = [
   { id: 'warden_pyre', x: 980, y: -1520, kind: 'ruins', tag: 'warden_pyre', label: "The Warden's Pyre", danger: 4, boss: 'warden_of_ash', chestTier: 'royal_chest' },
 ];
 
-// ── Pure helpers (unit-tested, used by RegionSystem) ────────────────────────
+// ── Pure helpers (unit-tested, used by the region's scene-side systems) ─────
 
 /** Which sub-region contains this world position? (Nearest containing circle.) */
 export function subregionAt(x: number, y: number): SubRegion | null {
@@ -856,33 +692,30 @@ export function encountersToTrigger(x: number, y: number, cleared: (id: string) 
   return ASHEN_ENCOUNTERS.filter((e: Encounter) => encounterTriggers(e, x, y, cleared(e.id)));
 }
 
-/**
- * Advance the crystal puzzle. Returns the new progress array, whether the
- * sequence completed, and whether the attempt just failed (reset).
- */
-export function puzzleStep(progress: string[], pressed: string, seq: string[]): { progress: string[]; solved: boolean; failed: boolean } {
-  const expected: string | undefined = seq[progress.length];
-  if (pressed === expected) {
-    const nextProgress: string[] = [...progress, pressed];
-    return { progress: nextProgress, solved: nextProgress.length === seq.length, failed: false };
-  }
-  // Wrong crystal: restart, but a re-press of the first crystal is a clean start.
-  if (pressed === seq[0]) return { progress: [pressed], solved: seq.length === 1, failed: false };
-  return { progress: [], solved: false, failed: true };
-}
-
 /** Total designed enemies — used by the map-density test. */
 export function encounterEnemyCount(): number {
   return ASHEN_ENCOUNTERS.reduce((n, e) => n + e.members.reduce((m, mm) => m + mm.count, 0), 0);
 }
 
-/**
- * Crafting stations the region itself provides, so the hub can improve gear
- * without a settlement. Derived from the interactables — the authored object
- * IS the station, one source of truth for where it stands.
- */
-export function regionStations(): { station: string; x: number; y: number }[] {
-  return ASHEN_INTERACTABLES
-    .filter((it: Interactable) => it.kind === 'station' && !!it.station)
-    .map((it: Interactable) => ({ station: it.station as string, x: it.x, y: it.y }));
-}
+// ── The region as the runtime sees it ───────────────────────────────────────
+// Everything the scene-side systems need in one object: the authored data above
+// plus the geometry helpers that belong to it. `systems/RegionRegistry.ts`
+// holds the list — this is the only shape a second region has to produce.
+
+export const ASHEN_REGION: RegionDef = {
+  id: 'ashen_frontier',
+  subregions: ASHEN_SUBREGIONS,
+  landmarks: ASHEN_LANDMARKS,
+  encounters: ASHEN_ENCOUNTERS,
+  interactables: ASHEN_INTERACTABLES,
+  hazards: ASHEN_HAZARDS,
+  puzzle: ASHEN_PUZZLE,
+  npcs: ASHEN_NPCS,
+  pois: ASHEN_POIS,
+  // The arena records its own outcome: killing the Warden sets warden_slain
+  // whether or not the player happened to have that quest at the killing blow.
+  arena: { area: 'pyre', bossKey: 'warden_of_ash', flag: 'warden_slain' },
+  subregionAt,
+  encountersToTrigger,
+  isSafe: inSafeZone,
+};
