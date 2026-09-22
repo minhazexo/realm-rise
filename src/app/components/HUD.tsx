@@ -89,10 +89,6 @@ export default function HUD(): JSX.Element | null {
           <span className="rep-pill">♛ {h.rep}</span>
         </div>
       </div>
-
-      <div className="hud-controls-hint hide-tablet">
-        WASD move · Mouse click attack · E gather · Shift sprint · Space dodge · Right-click block · Wheel zoom
-      </div>
     </div>
   );
 }
