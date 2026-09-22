@@ -44,6 +44,7 @@ import * as lootSys from '../systems/LootSystem.ts';
 import * as buildSys from '../systems/BuildSystem.ts';
 import * as minimapSys from '../systems/MinimapSystem.ts';
 import * as inputSys from '../systems/InputSystem.ts';
+import * as camSys from '../systems/CameraSystem.ts';
 import { createNpc } from '../systems/EntityFactory.ts';
 import { CHEST_POOLS, FALLBACK_CHEST_POOL } from '../data/lootTables.ts';
 import { configureSpawning } from '../systems/SpawnDirector.ts';
@@ -380,22 +381,21 @@ export default class WorldScene extends Phaser.Scene {
     if (this._frame % 4 === 0) {
       try { updateNightMask(this); } catch { /* canvas unavailable */ }
     }
+    // Camera zoom: eased EVERY frame with dt (frame-rate independent), so the
+    // entry glide, wheel nudges and the combat bias curve smoothly instead of
+    // stepping — it used to be an 8% lerp gated to every 20th frame, which is
+    // 3 visible jumps per second (the steppy auto-zoom after CONTINUE).
     // Fit the screen-space overlay layer AFTER this frame's zoom is applied —
-    // applyCamZoom lerps continuously, so a gated fit (it used to be every 4th
-    // frame) left the overlays sized for a stale zoom and night/weather showed
-    // bright edges while zooming. Cheap: no-ops unless zoom or canvas changed.
+    // a gated fit (it used to be every 4th frame) left the overlays sized for a
+    // stale zoom and night/weather showed bright edges while zooming. Cheap:
+    // no-ops unless zoom or canvas changed.
+    try { this.applyCamZoom(dt); } catch { /* headless */ }
     try { fitScreenLayer(this); } catch { /* pre-boot */ }
     // Phase B cadence: station proximity follows the player; chunk relight
     // tracks the clock without per-frame tint churn.
     if (this._frame % 60 === 0) {
       try { this.refreshStationsNear(); } catch { /* player may be dead */ }
       try { this.relightChunks(); } catch { /* textures may be gone */ }
-    }
-    // Combat zoom bias: re-apply on a slow cadence so the camera eases
-    // toward the biased baseline in combat and back when it ends
-    // (applyCamZoom lerps, so a few times a second is smooth, no snap).
-    if (this._frame % 20 === 0) {
-      try { this.applyCamZoom(); } catch { /* headless */ }
     }
     this.saveAcc += dt;
   }
@@ -974,13 +974,13 @@ export default class WorldScene extends Phaser.Scene {
     inputSys.togglePanel(this, name);
   }
 
-  /* ── Camera zoom (delegated to systems/InputSystem — scene stays thin) ─ */
-  applyCamZoom(): any {
-    return inputSys.applyCamZoom(this);
+  /* ── Camera zoom (delegated to systems/CameraSystem — scene stays thin) ─ */
+  applyCamZoom(dt?: number): any {
+    return camSys.applyCamZoom(this, dt);
   }
 
   nudgeCamZoom(dir: number): void {
-    inputSys.nudgeCamZoom(this, dir);
+    camSys.nudgeCamZoom(this, dir);
   }
   /* ── FX helpers (pooled, auto-destroy — fixes image leak) ────────── */
   fxHit(x: number, y: number): void {

@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// InputSystem — keyboard/mouse wiring, remappable action binds, camera zoom,
-// pause/panel toggles.
+// InputSystem — keyboard/mouse wiring, remappable action binds, pause/panel
+// toggles. Camera zoom policy lives in ./CameraSystem.ts (Phaser-free, so it
+// has headless tests); the wheel/keys in here call straight into it.
 //
 // Extracted from WorldScene (Phase 3, final god-class slice). Scene-context
 // functions; per-scene mutable state (keys, bindKeys, _boundActions) lives
@@ -14,9 +15,10 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { Bus, CH } from '../core/EventBus.ts';
-import { getSetting, updateSettings, movementKey } from '../systems/SettingsSystem.ts';
+import { movementKey } from '../systems/SettingsSystem.ts';
 import { updateBuildGhost } from './BuildSystem.ts';
 import type { BuildScene } from './BuildSystem.ts';
+import { nudgeCamZoom } from './CameraSystem.ts';
 
 /** KeyCodes as a plain lookup table (Phaser ships it as a namespace). */
 const KEY_CODE_TABLE = Phaser.Input.Keyboard.KeyCodes as unknown as Record<string, number>;
@@ -222,31 +224,4 @@ export function togglePanel(scene: InputScene, name: string): void {
   GameState.notify(CH.SCREEN, CH.WORLD);
 }
 
-/* ── Camera zoom (wheel / +/- / Z/X / HUD buttons / settings slider) ── */
-export function applyCamZoom(scene: InputScene): number {
-  const raw = Number(getSetting('camZoom') ?? 1);
-  const base = Math.max(0.6, Math.min(2, Number.isFinite(raw) ? raw : 1));
-  // Combat bias: zoom out ~4%
-  // during combat so melee arcs and incoming enemies stay in frame. The
-  // player's chosen baseline is always the anchor — combat only biases it.
-  const combat = GameState.session.inCombat === true;
-  const target = combat ? base * 0.96 : base;
-  const cur = scene.cameras.main.zoom || base;
-  const next = cur + (target - cur) * 0.08; // smooth lerp, no snap
-  const z = Math.abs(next - target) < 0.001 ? target : next;
-  try { scene.cameras.main.setZoom(z); } catch { /* headless */ }
-  return z;
-}
-
-export function nudgeCamZoom(scene: InputScene, dir: number): void {
-  const cur = Number(getSetting('camZoom') ?? 1) || 1;
-  const next = Math.round((Math.max(0.6, Math.min(2, cur + (dir > 0 ? 0.15 : -0.15)))) * 100) / 100;
-  try { updateSettings({ camZoom: next }); }
-  catch {
-    try {
-      GameState.s.settings.camZoom = next;
-      applyCamZoom(scene);
-      GameState.notify(CH.SETTINGS);
-    } catch { /* ignore */ }
-  }
-}
+/* Camera zoom (wheel / +/- / Z/X / HUD / settings) → ./CameraSystem.ts */

@@ -270,6 +270,47 @@ ok(pfx.graphicsQualityNum() === 1, 'med → qualityNum 1');
 ok(pfx.graphicsQualityAtLeast('low') === true, 'med ≥ low');
 ok(pfx.graphicsQualityAtLeast('high') === false, 'med < high');
 
+// ── Camera zoom easing: smooth and frame-rate independent ────────────────
+// The auto-zoom after CONTINUE used to be a fixed 8% step gated to every 20th
+// frame — 3 visible jumps per second, which is exactly the "atke atke" zoom
+// the player reported. It is now an exponential ease in dt: any frame cadence
+// traces the same curve, and it lands exactly on the target.
+console.log('— Camera zoom easing —');
+{
+  const { applyCamZoom } = await import('../src/game/systems/CameraSystem.ts');
+  const fake = () => ({ cameras: { main: { zoom: 1, setZoom(z) { this.zoom = z; } } } });
+  const frames = (scene, n, dt = 16.67) => { for (let i = 0; i < n; i++) applyCamZoom(scene, dt); };
+
+  updateSettings({ camZoom: 2 }); // the CONTINUE case: camera at 1, setting at 2
+  const entry = fake();
+  const first = applyCamZoom(entry, 16.67);
+  ok(first > 1 && first < 1.3, `one frame of the entry glide is a curve, not a snap (${first.toFixed(3)})`);
+
+  const steady = fake();
+  let prev = 1, monotone = true;
+  for (let i = 0; i < 40; i++) { const z = applyCamZoom(steady, 16.67); if (z <= prev) monotone = false; prev = z; }
+  ok(monotone, 'the zoom advances every single frame — no plateaus, no jumps');
+  frames(steady, 80);
+  ok(steady.cameras.main.zoom === 2, 'the glide settles exactly on the setting');
+
+  // Frame-rate independence: 50×10 ms and 5×100 ms are both half a second.
+  const a = fake(), b = fake();
+  frames(a, 50, 10); frames(b, 5, 100);
+  ok(Math.abs(a.cameras.main.zoom - b.cameras.main.zoom) < 1e-9,
+     `the curve is time-based, not frame-based (100fps and 10fps agree: ${a.cameras.main.zoom.toFixed(5)})`);
+
+  // The combat bias still eases ~4% out and back.
+  GameState.session.inCombat = true;
+  const combat = fake();
+  frames(combat, 200);
+  ok(combat.cameras.main.zoom === 2 * 0.96, 'combat eases to 4% below the baseline');
+  GameState.session.inCombat = false;
+  frames(combat, 200);
+  ok(combat.cameras.main.zoom === 2, 'and eases back to the baseline once combat ends');
+
+  updateSettings({ camZoom: 1 }); // leave the suite as found
+}
+
 resetSettings();
 ok(GameState.s.settings.graphicsQuality === 'med', 'reset restores graphicsQuality');
 
