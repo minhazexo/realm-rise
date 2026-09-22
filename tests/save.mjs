@@ -5,6 +5,7 @@ import {
   SAVE_VERSION, cmpVersions, migrations, migrateSave,
   serialize, saveToSlot, loadFromSlot, importSlotData, listSaves
 } from '../src/game/systems/SaveSystem.ts';
+import { newInstance } from '../src/game/data/items.ts';
 
 const store = {};
 globalThis.localStorage = {
@@ -75,6 +76,23 @@ delete legacy.inventorySlots;
 GameState.load(legacy);
 ok(GameState.s.meta.version === SAVE_VERSION, 'GameState.load stamps current');
 ok(typeof GameState.s.inventorySlots === 'number', 'GameState.load repairs branches');
+
+console.log('— Gear ids stay unique across a load —');
+// The iid counter restarts every session while the save keeps its ids: the
+// first gear crafted after CONTINUE used to collide, and the inventory grid
+// then rendered two children with the same React key.
+const dupSave = JSON.parse(JSON.stringify(serialize(GameState.s)));
+dupSave.inventory = [
+  { iid: 'i2', id: 'wooden_sword', qty: 1, dur: 10, maxDur: 10 },
+  { iid: 'i2', id: 'iron_sword', qty: 1, dur: 12, maxDur: 12 },
+  { iid: 'i5', id: 'iron_sword', qty: 1, dur: 12, maxDur: 12 },
+];
+GameState.load(dupSave);
+const iids = GameState.s.inventory.map((e) => e.iid).filter(Boolean);
+ok(iids.length === 3, `restored ${iids.length} gear pieces`);
+ok(new Set(iids).size === iids.length, `no duplicate gear ids after a load (${iids.join(', ')})`);
+const freshGear = newInstance('wooden_sword');
+ok(!!freshGear && !!freshGear.iid && !iids.includes(freshGear.iid), `gear made after a load gets a fresh id (${freshGear && freshGear.iid})`);
 
 console.log(fails === 0 ? '✅ SAVE PASS — versioned persistence holds.' : `❌ ${fails} save failure(s)`);
 process.exit(fails ? 1 : 0);

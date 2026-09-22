@@ -148,6 +148,30 @@ export const resetInstanceIdCounter = (): void => {
   iidCounter = 1;
 };
 
+/**
+ * Adopt a loaded bag without ever handing out an id twice. A fresh session's
+ * counter starts at 1 while the save carries ids issued in earlier sessions,
+ * so the first gear crafted after a load used to share an iid with restored
+ * gear — the inventory grid then rendered two React children with the same
+ * key (`Encountered two children with the same key, i2`). Duplicates in the
+ * save itself are re-stamped too, and the counter is kept clear of the bag.
+ */
+export function repairInstanceIds(items: unknown): void {
+  if (!Array.isArray(items)) return;
+  const seen: Set<string> = new Set<string>();
+  for (const raw of items) {
+    const gear = raw as ItemGearInstance;
+    if (!gear || typeof gear.iid !== 'string') continue;
+    // Already used by an earlier entry → this one is a collision.
+    if (seen.has(gear.iid)) gear.iid = `i${iidCounter++}`;
+    seen.add(gear.iid);
+    // Keep the counter past everything now in the bag (assigned ids are
+    // always greater than every seen id, so they can never collide either).
+    const n: number = Number(gear.iid.slice(1));
+    if (Number.isFinite(n) && n >= iidCounter) iidCounter = n + 1;
+  }
+}
+
 export function finalizeItems(): Readonly<Record<string, ItemDef>> {
   for (const id of Object.keys(REGISTRY)) {
     if (!REGISTRY[id]?.icon) console.warn('[items] missing icon hint:', id);
