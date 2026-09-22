@@ -80,6 +80,11 @@ export interface NpcRecord {
   aiWalkAccum: number;
   aiTargetX: number;
   aiTargetY: number;
+  /**
+   * Walk speed override (px/s). Village NPCs use the default 28; a traveling
+   * pedlar set by the world-event layer covers ground instead of pottering.
+   */
+  walkSpeed?: number;
 }
 
 /** Minimal scene surface consumed by NPC construction. */

@@ -33,6 +33,7 @@ import {
 } from '../world/chunkPainter.ts';
 import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
 import { placeRegion, updateRegion, regionSnapshot } from '../systems/RegionSystem.ts';
+import { tickWorldEvents, worldEventSnapshot } from '../systems/WorldEventRuntime.ts';
 import { regionStations } from '../systems/RegionRegistry.ts';
 
 /** Projectile tint per element (magic bolts). Falls back to arcane blue. */
@@ -347,6 +348,9 @@ export default class WorldScene extends Phaser.Scene {
     this.updateGatherProximity(px, py);
     this.updatePoiProximity(px, py);
     updateRegion(this, px, py, dt);
+    // Dynamic world events (brief §15): the scheduler decides, the runtime
+    // builds — always through systems that already exist.
+    tickWorldEvents(this, px, py, dt);
     this.updateNpcs(dt, px, py);
     this.gatherTick(dt);
     // Building Occlusion Transparency: fade buildings if player is standing behind them
@@ -562,11 +566,13 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   /* ── Chests & loot (spec §70–71) ────────────────────────────────────── */
-  spawnChest(x: number, y: number, tier: string, campId?: string): void {
-    if (campId && GameState.s.world.poiStates[campId]?.looted) return;
+  /** Returns the chest image so a caller that placed it can take it back. */
+  spawnChest(x: number, y: number, tier: string, campId?: string): Phaser.GameObjects.Image | null {
+    if (campId && GameState.s.world.poiStates[campId]?.looted) return null;
     const img = this.add.image(x, y, tier).setDepth(5);
     img.setInteractive({ useHandCursor: true });
     img.on('pointerdown', () => this.openChest(img, tier, campId));
+    return img;
   }
 
   openChest(img: Phaser.GameObjects.Image, tier: string, campId?: string): void {
@@ -713,7 +719,8 @@ export default class WorldScene extends Phaser.Scene {
             npc.aiDir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
             s.setFrame(`${npc.aiDir}_1`);
           } else {
-            const speed = 28;  // pixels/sec — slow wander
+            // Village wander is 28 px/s; a traveling pedlar says otherwise.
+            const speed = npc.walkSpeed || 28;
             const step: number = Math.min(speed * dt, dist);
             s.x += (dx / dist) * step;
             s.y += (dy / dist) * step;
@@ -1024,6 +1031,11 @@ export default class WorldScene extends Phaser.Scene {
   /** Authored-region state (live probes / debugging). */
   regionSnapshot(): Record<string, unknown> {
     return regionSnapshot(this);
+  }
+
+  /** Dynamic world-event state (live probes / debugging). */
+  worldEvents(): Record<string, unknown> {
+    return worldEventSnapshot(this);
   }
 
   /* ── Share helpers to other systems ────────────────────────────────── */
