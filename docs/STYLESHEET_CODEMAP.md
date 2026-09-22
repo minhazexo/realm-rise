@@ -281,15 +281,7 @@ Uses:
 
 These provide small state pills for difficulty, stage, and reputation.
 
-### 5.7 Controls hint
-
-Uses:
-
-- `.hud-controls-hint`
-
-This is a contextual input hint pill.
-
-### 5.8 Implication
+### 5.7 Implication
 
 The HUD is mostly styled through shared chrome rules rather than independent component styles. That means HUD visuals change when the shared HUD section changes, not when each HUD subcomponent changes.
 
@@ -521,7 +513,6 @@ Key classes:
 - `.resource-pill`
 - `.hotbar`, `.hotbar-btn`, `.hb-key`
 - `.hud-footer`, `.diff-pill`, `.stage-pill`, `.rep-pill`
-- `.hud-controls-hint`
 
 ### 11.3 Toast classes
 

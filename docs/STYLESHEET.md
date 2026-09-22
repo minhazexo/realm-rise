@@ -222,10 +222,6 @@ The footer uses small glass pills for things like:
 
 Each has its own accent color for quick scanning.
 
-### 8.5 Controls hint
-
-`.hud-controls-hint` is a centered bottom hint pill used for contextual input guidance.
-
 ---
 
 ## 9. Toasts
@@ -596,7 +592,6 @@ The HUD tree uses:
 - `.hb-key`
 - `.hud-footer`
 - pill variants for difficulty/stage/reputation
-- `.hud-controls-hint`
 
 This means the HUD is mostly styled through shared chrome rules rather than independent per-panel styling.
 
@@ -691,7 +686,7 @@ If the UI grows, the most natural extensions are:
 ## 20. Quick map of the major class families
 
 - **Layout**: `.app-root`, `.game-canvas`, `.panel-layer`, `.ui-scale-wrapper`, `.panel`, `.hud-root`, `.hud-top`, `.hud-bottom`
-- **HUD**: `.stat-row`, `.stat-fill`, `.level-pill`, `.xp-bar`, `.xp-fill`, `.resource-pill`, `.ambience`, `.hotbar`, `.hotbar-btn`, `.hb-key`, `.hud-footer`, `.hud-controls-hint`
+- **HUD**: `.stat-row`, `.stat-fill`, `.level-pill`, `.xp-bar`, `.xp-fill`, `.resource-pill`, `.ambience`, `.hotbar`, `.hotbar-btn`, `.hb-key`, `.hud-footer`
 - **Toasts**: `.toasts`, `.toast`, `.toast-*`, `.toast-title`, `.toast-msg`, `.toast-icon`
 - **Settings**: `.settings-panel`, `.settings-header`, `.settings-title`, `.setting-group`, `.setting-group-head`, `.setting-hint`, `.setting-row`, `.setting-label`, `.setting-row-hint`, `.setting-row-control`, `.setting-toggle*`, `.setting-onoff*`, `.setting-slider*`, `.setting-pills`, `.setting-pill`, `.setting-test-flag`, `.settings-keybinds*`, `.settings-mute`, `.settings-back`
 - **Buttons**: `.btn`, `.btn-gold`, `.btn-small`, `.btn-ghost`, `.btn-menu`
