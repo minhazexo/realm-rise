@@ -4,6 +4,7 @@ import type { ItemDef, RarityInfo } from './itemDefs.ts';
 import './itemsResources.ts';
 import './itemsGear.ts';
 import './itemsArmor.ts';
+import './weaponsArpg.ts';
 
 export const ITEMS: Readonly<Record<string, ItemDef>> = finalizeItems();
 

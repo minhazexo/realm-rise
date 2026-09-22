@@ -13,6 +13,7 @@ import { getEnemyDef } from '../data/enemies.ts';
 import { awardXP, profXP } from '../systems/ProgressionSystem.ts';
 import { BIOMES } from '../world/biomeTable.ts';
 import { biomeAt } from '../world/worldGen.ts';
+import * as ElementalSystem from '../systems/ElementalSystem.ts';
 
 const STATE = Object.freeze({ IDLE: 0, PATROL: 1, DETECT: 2, CHASE: 3, ATTACK: 4, RETREAT: 5, SEARCH: 6, DEAD: 7 });
 
@@ -24,6 +25,8 @@ export default class Enemy {
   key!: string;
   sprite!: Phaser.Physics.Arcade.Sprite;
   scale: number = 1;
+  /** Elemental status effects (burn/chill/shock/poison) — ElementalSystem owns the math. */
+  statuses: import('../systems/ElementalSystem.ts').StatusState = ElementalSystem.newStatusState();
   shadow!: Phaser.GameObjects.Image | null;
   maxHp: number = 0;
   hp: number = 0;
@@ -315,6 +318,7 @@ export default class Enemy {
     this.sprite.setDepth(Math.round(this.sprite.y));
     this.shadow!.setPosition(this.sprite.x, this.sprite.y + 3).setDepth(this.sprite.depth - 1);
     this.syncAnim(dt);
+    this.tickStatuses(dt);
     this.updateHealthBar(dt);
   }
 
@@ -368,6 +372,8 @@ export default class Enemy {
 
   moveToward(tx: number, ty: number, speed: number, _dt?: number): void {
     if (!this.sprite?.body) return;
+    // Chill status slows movement (ElementalSystem owns the multiplier).
+    speed *= ElementalSystem.statusMoveMult(this.statuses);
     const ang: number = Math.atan2(ty - this.sprite.y, tx - this.sprite.x);
     (this.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(ang) * speed, Math.sin(ang) * speed);
     this.dir = Math.abs(Math.cos(ang)) > 0.5 ? (Math.cos(ang) > 0 ? 'right' : 'left') : (Math.sin(ang) > 0 ? 'down' : 'up');
@@ -439,9 +445,35 @@ export default class Enemy {
   }
 
 /* ── Damage, death & loot ─────────────────────────────────────────────── */
-  takeDamage(amount: number, srcX?: number | null, srcY?: number | null, floaters?: any, crit?: boolean): void {
-    if (this.dead) return;
+  takeDamage(amount: number, srcX?: number | null, srcY?: number | null, floaters?: any, crit?: boolean, element?: string, special?: import('../systems/WeaponSpecials.ts').SpecialResult | null): number {
+    if (this.dead) return 0;
     if (this.state === STATE.IDLE || this.state === STATE.PATROL) this.enterChase();
+    // ── Elemental pass: resist/weak multipliers + status infliction ──
+    let elColor: string | null = null;
+    try {
+      const E = ElementalSystem;
+      const el: string = element || 'physical';
+      if (E.isElement(el)) {
+        // Shocked enemies take amplified damage (before resist math).
+        amount *= E.damageTakenMult(this.statuses);
+        const adj = E.elementalDamage(amount, el, this.def as any);
+        amount = Math.max(1, Math.round(adj.dmg));
+        elColor = E.ELEMENTS[el].color;
+        if (adj.mult > 1) elColor = '#ff5a5a'; // weakness reads hotter than the element
+        else if (adj.mult < 1) elColor = '#8fa3b8'; // resistance reads dull
+        const inst = E.statusFor(el as any, amount, { force: !!crit });
+        if (inst && !this.boss) E.applyStatus(this.statuses, inst);
+      }
+    } catch { /* elements never break the swing */ }
+    // ── Weapon specials (legendary line) — lifesteal returns to caller pool ──
+    if (special && special.lifesteal > 0) {
+      try {
+        const S = GameState.s;
+        const heal = Math.max(1, Math.round(amount * special.lifesteal));
+        S.player.hp = Math.min(S.player.derived?.maxHp || S.player.hp, S.player.hp + heal);
+        floaters?.add(this.sprite.x, this.sprite.y - 42, `+${heal}`, '#8aff9f', 0.95);
+      } catch { /* cosmetic */ }
+    }
     this.hp -= amount;
     // Reveal health bar on first damage
     this._hpBarTimer = 3.2;
@@ -466,8 +498,21 @@ export default class Enemy {
         eb.velocity.y += Math.sin(a) * push;
       }
     } catch { /* physics only */ }
-    floaters?.add(this.sprite.x, this.sprite.y - 30, `${amount}`, crit ? '#ffd66b' : '#ffe9c9', crit ? 1.2 : 1);
+    floaters?.add(this.sprite.x, this.sprite.y - 30, `${amount}`, crit ? '#ffd66b' : (elColor || '#ffe9c9'), crit ? 1.2 : 1);
     if (this.hp <= 0) this.die(srcX, srcY);
+    return amount;
+  }
+
+  /** Status dot/chill tick — called from update() once per frame. */
+  tickStatuses(dt: number): void {
+    try {
+      const { dot, kind } = ElementalSystem.tickStatuses(this.statuses, dt);
+      if (dot > 0 && !this.dead) {
+        this.hp -= dot;
+        (this.scene as any).floats?.add(this.sprite.x, this.sprite.y - 24, `${dot}`, kind === 'burn' ? '#ff8a4a' : '#9fe86b', 0.85);
+        if (this.hp <= 0) this.die(null, null);
+      }
+    } catch { /* status ticks never crash */ }
   }
 
   die(_srcX?: number | null, _srcY?: number | null): void {

@@ -7,6 +7,7 @@ import { getItem } from '../data/items.ts';
 import { wearEquipped, countItem, removeItem } from '../systems/InventorySystem.ts';
 import { shakeAllowed, shadowsEnabled, isImmortal, reducedMotion } from '../systems/SettingsSystem.ts';
 import { notifyPlayerHit } from '../systems/AutoAttackSystem.ts';
+import { resolveSpecial } from '../systems/WeaponSpecials.ts';
 import { applyBreathing } from '../systems/BreathingFX.ts';
 
 type Dir = 'down' | 'up' | 'left' | 'right';
@@ -183,6 +184,9 @@ export default class Player {
     if (this.regenDelay <= 0 && !sprinting) {
       S.player.stamina = Math.min(D.maxStamina, S.player.stamina + D.staminaRegen * dt);
     }
+    // Mana regen (ARPG staff economy): slow, interruption-free pool so casting
+    // is a rhythm rather than a starvation loop. Scales with willpower.
+    S.player.mana = Math.min(D.maxMana ?? 60, (S.player.mana ?? 0) + 3.5 * dt * (1 + (D.willpower || 0) * 0.08));
 
     this.updateFacing(mv, moving, ctx.pointerWorld);
     this.updateWalkAnim(dt, moving);
@@ -305,6 +309,22 @@ export default class Player {
       return false;
     }
 
+    // ── Staff: magic bolts on the mana economy (ARPG arcnist line) ──
+    if (wpn.style === 'staff') {
+      const cost: number = wpn.manaCost || 6;
+      if ((S.player.mana ?? 0) < cost) { floaters.add(ox, oy - 34, 'No mana!', '#9fb4e8'); return; }
+      S.player.mana -= cost;
+      const el: string = wpn.element || 'arcane';
+      (this.scene as any).spawnProjectile({
+        kind: 'magic', x: ox, y: oy - 6, angle: ang,
+        speed: wpn.projectileSpeed || 460, maxDist: wpn.range * (D.bowRangeMult || 1),
+        dmg: wpn.dmg * (D.rangedDmgMult || 1) * (1 + (D.intellect || 0) * 0.02),
+        crit: D.critRanged, pierce: 0, owner: 'player', element: el
+      });
+      Bus.emit('play-sound', 'arrow_shot');
+      return false;
+    }
+
     Bus.emit('play-sound', 'sword');
     this.slashFx.setTexture(opts.heavy ? 'fx_slash3' : 'fx_slash2')
       .setPosition(ox + Math.cos(ang) * 26, oy + Math.sin(ang) * 26)
@@ -324,6 +344,10 @@ export default class Player {
       }
     } catch { /* cosmetic only */ }
 
+    // ── Weapon identity extras (ARPG pass): crit-damage bonus (dagger line),
+    // combo-finisher override (dual-blade line), legendary specials (below).
+    const critDmgBonus: number = wpn.critDmgBonus || 0;
+    const finisherMult: number = wpn.comboFinisherMult || 1.5;
     // ── Weapon style identity: slash / crush / pierce feel different ──
     const style: string = wpn.style || 'slash';
     let styleDmgMult = 1, styleReachMult = 1, styleArcMult = 1;
@@ -343,7 +367,8 @@ export default class Player {
       this.comboWindow = now + 0.9;
       if (this.comboCount >= 3) {
         isFinisher = true;
-        dmgBase *= 1.5;
+        // Dual-blade line overrides the base finisher payoff (data-driven).
+        dmgBase *= finisherMult;
         this.comboCount = 0; this.comboWindow = 0;
       }
     }
@@ -362,7 +387,48 @@ export default class Player {
       // Spear bonus applies per-target (animals), not blindly to the swing.
       if (wdef?.weapon?.reachBonusVsAnimals && /wolf|boar|bear|dire|beast|animal/i.test(`${e.key || ''} ${e.def?.name || ''} ${e.def?.kind || ''}`)) dmg *= 1.12;
       const crit: boolean = Math.random() < D.critMelee + (wpn.crit || 0);
-      e.takeDamage(Math.round(dmg * (crit ? 1.85 : 1)), ox, oy, floaters, crit || isFinisher);
+      // Legendary specials resolve per landed hit (data-driven, pure module).
+      const specialRes = resolveSpecial({
+        special: wpn.special, element: (wpn.element || 'physical') as any,
+        baseDmg: dmg, isCrit: crit, isFinisher, isHeavy: !!opts.heavy,
+        nearbyEnemies: enemies.filter((o) => o !== e && !o.dead).slice(0, 4)
+          .map((o) => ({ key: o.key || '', def: { boss: !!o.boss } })),
+        defenderKey: `${e.key || ''} ${e.def?.name || ''}`
+      });
+      if (specialRes.dmgMult !== 1) dmg *= specialRes.dmgMult;
+      e.takeDamage(Math.round(dmg * (crit ? 1.85 + critDmgBonus : 1)), ox, oy, floaters, crit || isFinisher,
+        wpn.element, specialRes);
+      // Special side-effects on the attacker's pools.
+      if (specialRes.energyRefund > 0) {
+        S.player.stamina = Math.min(D.maxStamina, S.player.stamina + specialRes.energyRefund);
+        floaters?.add?.(this.sprite.x, this.sprite.y - 46, specialRes.label || '', '#b48aff', 0.95);
+      }
+      // Stormpiercer chain: arc lightning to up to 3 nearby foes at 45%.
+      if (specialRes.chainTargets.length) {
+        const others = enemies.filter((o) => o !== e && !o.dead);
+        floaters?.add?.(e.sprite.x, e.sprite.y - 46, specialRes.label || '', '#ffe86b', 0.95);
+        for (const ci of specialRes.chainTargets) {
+          const target = others[ci];
+          if (!target) continue;
+          target.takeDamage(Math.max(1, Math.round(dmg * specialRes.chainMult)), ox, oy, floaters, false, 'lightning', null);
+        }
+      }
+      // Dawnbreaker wave: heavies release a fire ring around the impact —
+      // 50% burn damage to everything nearby + an expanding glow ring.
+      if (specialRes.fireWave) {
+        floaters?.add?.(e.sprite.x, e.sprite.y - 46, specialRes.label || '', '#ff8a4a', 1.1);
+        try {
+          const ring = this.scene.add.image(e.sprite.x, e.sprite.y, 'fx_light')
+            .setBlendMode(Phaser.BlendModes.ADD).setDepth(3900).setScale(0.3).setAlpha(0.8).setTint(0xff8a4a);
+          this.scene.tweens.add({ targets: ring, scale: 1.4, alpha: 0, duration: 340, ease: 'Quad.out', onComplete: () => ring.destroy() });
+        } catch { /* cosmetic */ }
+        for (const o of enemies) {
+          if (o === e || o.dead) continue;
+          if (Phaser.Math.Distance.Between(o.sprite.x, o.sprite.y, e.sprite.x, e.sprite.y) < 90) {
+            o.takeDamage(Math.max(1, Math.round(dmg * 0.5)), e.sprite.x, e.sprite.y, floaters, false, 'fire', null);
+          }
+        }
+      }
       if (isFinisher && e.sprite?.body && !e.dead) {
         // Finisher knockback shove along the swing direction.
         const ka: number = Math.atan2(e.sprite.y - oy, e.sprite.x - ox);
