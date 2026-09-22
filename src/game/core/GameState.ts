@@ -7,7 +7,7 @@ import { createStateDefaults, STARTER_KIT } from './stateFactory.ts';
 import type { GameRootState, CharOpts, PlayerAlloc } from './stateFactory.ts';
 import type { DifficultyKey } from './Constants.ts';
 import { CH, Bus } from './EventBus.ts';
-import { getItem } from '../data/items.ts';
+import { getItem, repairInstanceIds } from '../data/items.ts';
 import { applyBoon } from '../systems/LegacyStore.ts';
 import { migrateSave } from '../systems/SaveSystem.ts';
 import type { SavePayload } from '../systems/SaveSystem.ts';
@@ -157,6 +157,9 @@ class GameStore {
         }
       }
     }
+    // Gear ids must stay unique across sessions: the iid counter is per
+    // session, the save is not (duplicates → duplicate React keys in the grid).
+    repairInstanceIds(this.state?.inventory);
     this.session.waypoint = null;
     this.session.uiPanel = null;
     this.session.paused = false;

@@ -1,5 +1,5 @@
 // Aggregated item database.
-import { RARITY, ITEM_CATS, newInstance, resetInstanceIdCounter, finalizeItems } from './itemDefs.ts';
+import { RARITY, ITEM_CATS, newInstance, resetInstanceIdCounter, repairInstanceIds, finalizeItems } from './itemDefs.ts';
 import type { ItemDef, RarityInfo } from './itemDefs.ts';
 import './itemsResources.ts';
 import './itemsGear.ts';
@@ -25,4 +25,4 @@ export const itemRarity = (it: ItemRef | null | undefined): RarityInfo | undefin
   return RARITY[key];
 };
 
-export { newInstance, resetInstanceIdCounter, RARITY, ITEM_CATS };
+export { newInstance, resetInstanceIdCounter, repairInstanceIds, RARITY, ITEM_CATS };

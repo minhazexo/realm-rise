@@ -52,7 +52,7 @@ export default function HUD(): JSX.Element | null {
   const toggle = (p: string): void => sceneCommand('togglePanel', GameState.session.uiPanel === p ? null : p);
 
   return (
-    <div className="hud-root pointer-none">
+    <div className="hud-root">
       {/* top bars */}
       <div className="hud-top">
         <div className="vitals">
