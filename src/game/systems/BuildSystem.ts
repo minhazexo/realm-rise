@@ -270,16 +270,37 @@ export function upgradeBuilding(scene: BuildScene, uid: string): { ok: boolean; 
   return { ok: true };
 }
 
+/** A crafting station that exists in the world without a settlement building. */
+export interface StationPoint {
+  station: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * Authored (region) stations, registered once at scene boot. They exist so a
+ * hub can provide a station before any settlement does — and they go through
+ * the SAME proximity rule below, so there is exactly one answer to "is this
+ * station in reach?" no matter which kind of station asks.
+ */
+let authoredStations: StationPoint[] = [];
+export function setAuthoredStations(list: StationPoint[]): void {
+  authoredStations = list;
+}
+
 /** Recompute crafting-station proximity for the player position. */
 export function refreshStationsNear(scene: BuildScene): void {
   const near: Record<string, boolean> = {};
   const px = scene.player.sprite.x, py = scene.player.sprite.y;
+  const inReach = (x: number, y: number): boolean =>
+    (x - px) ** 2 + (y - py) ** 2 < STATION_RADIUS * STATION_RADIUS;
   for (const b of GameState.s.settlement.buildings) {
     if (!b.complete) continue;
     const def = getBuildingDef(b.key);
-    if (def?.station && (b.x - px) ** 2 + (b.y - py) ** 2 < STATION_RADIUS * STATION_RADIUS) {
-      near[def.station] = true;
-    }
+    if (def?.station && inReach(b.x, b.y)) near[def.station] = true;
+  }
+  for (const s of authoredStations) {
+    if (inReach(s.x, s.y)) near[s.station] = true;
   }
   GameState.session.stationsNear = near;
 }
@@ -289,15 +310,20 @@ export function showStationRadius(scene: BuildScene, station: string | null | un
   if (!station) return;
   scene._stationRings?.forEach((g) => g.destroy());
   scene._stationRings = [];
+  // Both kinds of station get a ring, so the hint works at a hub where no
+  // settlement building exists yet.
+  const where: { x: number; y: number }[] = [];
   for (const b of GameState.s.settlement.buildings) {
     if (!b.complete) continue;
-    const def = getBuildingDef(b.key);
-    if (def?.station !== station) continue;
+    if (getBuildingDef(b.key)?.station === station) where.push(b);
+  }
+  for (const s of authoredStations) if (s.station === station) where.push(s);
+  for (const w of where) {
     const g = scene.add.graphics().setDepth(6);
     g.lineStyle(2, 0x8fd8ff, 0.9);
-    g.strokeCircle(b.x, b.y, STATION_RADIUS);
+    g.strokeCircle(w.x, w.y, STATION_RADIUS);
     g.fillStyle(0x8fd8ff, 0.06);
-    g.fillCircle(b.x, b.y, STATION_RADIUS);
+    g.fillCircle(w.x, w.y, STATION_RADIUS);
     scene.tweens.add({ targets: g, alpha: 0, duration: 2500, onComplete: () => g.destroy() });
     scene._stationRings.push(g);
   }

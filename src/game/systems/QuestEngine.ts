@@ -61,8 +61,22 @@ export function setFlag(flag: string, value: unknown = true): void {
   GameState.notify(CH.STORY);
 }
 
+/**
+ * Guards against completion re-entering itself: granting a reward flag calls
+ * setFlag, which fires a `flagset` event, which runs checkCompletion — and a
+ * quest whose steps are all already done would complete all over again,
+ * recursing until the stack blew. Completion happens exactly once.
+ */
+const completing: Set<string> = new Set();
+
 /** Mark a quest complete and grant rewards (also used by test harness). */
 export function completeQuest(def: QuestDef): void {
+  if (completing.has(def.id)) return;
+  completing.add(def.id);
+  try { completeQuestOnce(def); } finally { completing.delete(def.id); }
+}
+
+function completeQuestOnce(def: QuestDef): void {
   const S = st().quests;
   const r = def.rewards || {};
   if (r.xp) awardXP(r.xp, 'quest');
@@ -70,6 +84,11 @@ export function completeQuest(def: QuestDef): void {
   if (r.rep) addReputation(r.rep);
   if (r.items) for (const [id, n] of Object.entries(r.items)) addItem(id, n, { ignoreCap: true });
   if (r.happinessTown) st().settlement.happiness = Math.min(100, st().settlement.happiness + r.happinessTown);
+  // Reward flags and completion flags are both real: `flagsSet` is what the
+  // reward bundle promises (story beats like warden_slain), `flagsOnComplete`
+  // is the quest's own aftermath. Missing flagsSet silently locked every
+  // flag-gated vault the data declared.
+  for (const f of r.flagsSet || []) setFlag(f);
   for (const f of def.flagsOnComplete || []) setFlag(f);
 
   GameState.toast({

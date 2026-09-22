@@ -20,6 +20,9 @@ import { rollNodeType, rollEnemyKey } from '../world/nodeTypes.ts';
 import { BIOMES } from '../world/biomeTable.ts';
 import { configureEntities, createEnemy, createResource } from './EntityFactory.ts';
 import type { ResourceScene, EnemyScene } from './EntityFactory.ts';
+import { getEnemyDef } from '../data/enemies.ts';
+import { ELITE_FOR_BASE } from '../data/elites.ts';
+import { inSafeZone } from '../data/regionAshen.ts';
 
 /** Entity constructors wired once from WorldScene.create(). */
 export interface SpawningClasses {
@@ -71,14 +74,16 @@ export function populateChunk(scene: Phaser.Scene, cx: number, cy: number): void
   const distFromHome: number = home ? Math.hypot(oX + cs / 2 - home.x, oY + cs / 2 - home.y) : Infinity;
   if (enemyR < 0.12 && distFromSpawn > 900 && distFromHome > 700) {
     const key: string | null = rollEnemy(biomeId, hash(cx * 13 + 3, cy * 5 + 9));
-    if (key && !isWaterAt(oX + cs / 2, oY + cs / 2)) {
+    // The Ashen Frontier's village is a safe hub (map brief §5): no spawns
+    // inside it, authored or procedural.
+    if (key && !isWaterAt(oX + cs / 2, oY + cs / 2) && !inSafeZone(oX + cs / 2, oY + cs / 2)) {
       // Prey spawns as a small herd (deer are social; lone deer read as bugs).
       if (key === 'deer') {
         const herd: number = 2 + Math.floor(hash(cx * 3, cy * 9) * 3); // 2–4
         for (let i = 0; i < herd; i++) {
           const hx: number = oX + cs / 2 + (hash(cx + i, cy) - 0.5) * 160;
           const hy: number = oY + cs / 2 + (hash(cx, cy + i) - 0.5) * 160;
-          if (!isWaterAt(hx, hy)) spawnEnemy(scene, key, hx, hy);
+          if (!isWaterAt(hx, hy) && !inSafeZone(hx, hy)) spawnEnemy(scene, key, hx, hy);
         }
       } else {
         spawnEnemy(scene, key, oX + cs / 2, oY + cs / 2);
@@ -102,7 +107,21 @@ export function rollEnemy(biomeId: string, rnd: number): string | null {
   return rollEnemyKey(biomeId, rnd);
 }
 
-/** Spawn an enemy — delegates to EntityFactory. */
+/** Spawn an enemy — delegates to EntityFactory, with a small chance the
+ *  common enemy is promoted to its named elite variant (vertical slice §7).
+ *  Promotion is rarer by day, more likely in dangerous biomes and at night. */
 export function spawnEnemy(scene: Phaser.Scene, key: string, x: number, y: number): unknown {
-  return createEnemy(scene as EnemyScene, key, x, y);
+  let spawnKey: string = key;
+  const eliteKey: string | undefined = ELITE_FOR_BASE[key];
+  if (eliteKey) {
+    const base = getEnemyDef(key);
+    if (base && !base.boss && !base.prey) {
+      const t: number = GameState.s.world.timeOfDay;
+      const night: boolean = t > 0.78 || t < 0.24; // matches EnvSystem DUSK/DAWN
+      let dm: number = 1;
+      try { dm = BIOMES[biomeAt(x, y)]?.dangerMult || 1; } catch { /* origin chunk */ }
+      if (Math.random() < 0.03 * dm + (night ? 0.025 : 0)) spawnKey = eliteKey;
+    }
+  }
+  return createEnemy(scene as EnemyScene, spawnKey, x, y);
 }

@@ -9,6 +9,7 @@ import { biomeAt } from '../world/worldGen.ts';
 import { particleMultiplier, photosensitiveMode, reducedMotion } from './SettingsSystem.ts';
 import { throttleConfig } from './particleThrottle.ts';
 import { setSkyColor, setSunPosition } from './WaterSystem.ts';
+import { addScreenOverlay, screenPoint } from './ScreenOverlays.ts';
 
 export const DAWN = 0.24;
 export const DUSK = 0.78;
@@ -83,15 +84,15 @@ export default class EnvSystem {
     const h = this.scene.scale.height;
 
     // Night darkness overlay (tinted blue-black for richer nights)
-    this.darkLayer = this.scene.add.rectangle(0, 0, w, h, 0x080e1a, 0)
-      .setOrigin(0).setDepth(4000).setScrollFactor(0);
+    this.darkLayer = addScreenOverlay(this.scene,
+      this.scene.add.rectangle(0, 0, w, h, 0x080e1a, 0).setOrigin(0), 4000);
 
     // Warm dawn/dusk color grade overlay
-    this.gradeLayer = this.scene.add.rectangle(0, 0, w, h, 0xff8844, 0)
-      .setOrigin(0).setDepth(3998).setScrollFactor(0).setBlendMode('ADD');
+    this.gradeLayer = addScreenOverlay(this.scene,
+      this.scene.add.rectangle(0, 0, w, h, 0xff8844, 0).setOrigin(0).setBlendMode('ADD'), 3998);
 
-    // Richer star field
-    this.starLayer = this.scene.add.graphics().setDepth(4001).setScrollFactor(0).setAlpha(0);
+    // Richer star field (draws in screen coords, so it is anchored, not sized)
+    this.starLayer = addScreenOverlay(this.scene, this.scene.add.graphics().setAlpha(0), 4001, { mode: 'anchor' });
     this._stars = [];
     for (let i = 0; i < 140; i++) {
       const x = Math.random() * w;
@@ -114,8 +115,8 @@ export default class EnvSystem {
       ctx.fillRect(0, 0, 256, 256);
       this.scene.textures.addCanvas('fx_vignette', canvas);
     }
-    this.vignette = this.scene.add.image(0, 0, 'fx_vignette').setOrigin(0).setDepth(4195).setScrollFactor(0);
-    this.posVignette();
+    this.vignette = addScreenOverlay(this.scene,
+      this.scene.add.image(0, 0, 'fx_vignette').setOrigin(0), 4195);
 
     // Low-health danger vignette
     if (!this.scene.textures.exists('fx_danger_vignette')) {
@@ -128,31 +129,23 @@ export default class EnvSystem {
       ctx.fillRect(0, 0, 256, 256);
       this.scene.textures.addCanvas('fx_danger_vignette', canvas);
     }
-    this.dangerVignette = this.scene.add.image(0, 0, 'fx_danger_vignette')
-      .setOrigin(0).setDepth(4196).setScrollFactor(0).setAlpha(0)
-      .setDisplaySize(this.scene.scale.width, this.scene.scale.height);
+    this.dangerVignette = addScreenOverlay(this.scene,
+      this.scene.add.image(0, 0, 'fx_danger_vignette').setOrigin(0).setAlpha(0), 4196);
 
-    // Sun / moon
-    this.sunSprite = this.scene.add.image(w - 100, 70, 'proj_fireball')
-      .setScrollFactor(0).setDepth(4001).setBlendMode('ADD').setAlpha(0.55);
+    // Sun / moon — pinned 100px in from the top-right corner.
+    this.sunSprite = addScreenOverlay(this.scene,
+      this.scene.add.image(0, 0, 'proj_fireball').setBlendMode('ADD').setAlpha(0.55), 4001,
+      { mode: 'pin', at: (vw: number) => [vw - 100, 70] });
 
     // Ambient sky fill light
-    this.skyGlow = this.scene.add.image(w / 2, h / 2, 'fx_light')
-      .setScrollFactor(0).setDepth(3999).setBlendMode('ADD')
-      .setAlpha(0.12).setDisplaySize(w * 2.2, h * 2.2);
+    this.skyGlow = addScreenOverlay(this.scene,
+      this.scene.add.image(0, 0, 'fx_light').setBlendMode('ADD').setAlpha(0.12), 3999,
+      { mode: 'fill', scale: 2.2 });
 
     // Night fireflies (spawned when night begins)
     this.fireflyEmitter = null;
 
     this.weatherTimer = 18 + Math.random() * 40;
-  }
-
-  /** Position the vignette image to cover the whole viewport (on create + resize). */
-  posVignette(): void {
-    if (!this.vignette) return;
-    const w = this.scene.scale.width;
-    const h = this.scene.scale.height;
-    this.vignette.setDisplaySize(w, h);
   }
 
   /** Canvas helper for building the procedural vignette texture. */
@@ -170,6 +163,7 @@ export default class EnvSystem {
     const pool: string[] = ['clear', 'clear', 'clear', 'drizzle', 'fog'];
     if (b === 'frozen') pool.push('snow', 'snow', 'snow');
     if (b === 'desert') pool.push('heat', 'heat');
+    if (b === 'volcanic') pool.push('ash', 'ash');
     if (b === 'swamp' || b === 'riverlands') pool.push('fog', 'drizzle');
     if (Math.random() < 0.12) pool.push('storm');
     this.setWeather(pool[(Math.random() * pool.length) | 0] ?? 'clear');
@@ -196,8 +190,9 @@ export default class EnvSystem {
     // Photosensitivity mode: thunder + soft rumble cue, no white strobe.
     if (!photosensitiveMode()) {
       // White flash overlay
-      const flash = this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0xffffff, 0.6)
-        .setOrigin(0).setScrollFactor(0).setDepth(4100).setBlendMode('ADD');
+      const flash = addScreenOverlay(this.scene,
+        this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0xffffff, 0.6)
+          .setOrigin(0).setBlendMode('ADD'), 4100);
       // Quick flash + fade
       this.scene.tweens.add({
         targets: flash, alpha: 0, duration: 180,
@@ -222,8 +217,8 @@ export default class EnvSystem {
         quantity: isStorm ? 5 : 2, frequency: isStorm ? 40 : 60,
         alpha: { start: isStorm ? 0.8 : 0.7, end: 0.1 }
       });
-      if (cfg) this.rainEmitter = this.scene.add.particles(0, 0, 'pt_rain', cfg)
-        .setDepth(3900).setScrollFactor(0);
+      if (cfg) this.rainEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_rain', cfg), 3900, { mode: 'anchor' });
     } else if (this.weather === 'snow') {
       const cfg = throttleConfig({
         x: { min: 0, max: w }, y: -10, lifespan: 2800,
@@ -231,10 +226,11 @@ export default class EnvSystem {
         alpha: { start: 0.9, end: 0.15 }, scale: { min: 0.3, max: 1.1 },
         rotate: { min: 0, max: 360 }
       });
-      if (cfg) this.snowEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
-        .setDepth(3900).setScrollFactor(0);
+      if (cfg) this.snowEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_snow', cfg), 3900, { mode: 'anchor' });
     } else if (this.weather === 'fog') {
-      this.fogRect = this.scene.add.rectangle(0, 0, w, h, 0xdfe4ec, 0.34).setOrigin(0).setScrollFactor(0).setDepth(3900).setBlendMode('ADD');
+      this.fogRect = addScreenOverlay(this.scene,
+        this.scene.add.rectangle(0, 0, w, h, 0xdfe4ec, 0.34).setOrigin(0).setBlendMode('ADD'), 3900);
       // Drifting fog wisps
       const cfg = throttleConfig({
         x: { min: 0, max: w }, y: { min: h * 0.3, max: h * 0.7 }, lifespan: 5000,
@@ -242,10 +238,24 @@ export default class EnvSystem {
         alpha: { start: 0.15, end: 0 }, scale: { min: 2, max: 4 },
         tint: 0xdfe4ec
       });
-      if (cfg) this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
-        .setDepth(3900).setScrollFactor(0);
+      if (cfg) this.fogEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_snow', cfg), 3900, { mode: 'anchor' });
+    } else if (this.weather === 'ash') {
+      // Emberwaste ashfall: a grey NORMAL-blend veil (ADD would read as light)
+      // plus slow drifting flakes — reduced visibility, not a colour grade.
+      this.fogRect = addScreenOverlay(this.scene,
+        this.scene.add.rectangle(0, 0, w, h, 0x9a8f86, 0.22).setOrigin(0), 3900);
+      const cfg = throttleConfig({
+        x: { min: 0, max: w }, y: -10, lifespan: 4200,
+        speedY: 34, speedX: 16, quantity: 1, frequency: 110,
+        alpha: { start: 0.55, end: 0.05 }, scale: { min: 0.2, max: 0.7 },
+        tint: 0xbfb4a8
+      });
+      if (cfg) this.fogEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_snow', cfg), 3900, { mode: 'anchor' });
     } else if (this.weather === 'heat') {
-      this.fogRect = this.scene.add.rectangle(0, 0, w, h, 0xffddaa, 0.2).setOrigin(0).setScrollFactor(0).setDepth(3900).setBlendMode('ADD');
+      this.fogRect = addScreenOverlay(this.scene,
+        this.scene.add.rectangle(0, 0, w, h, 0xffddaa, 0.2).setOrigin(0).setBlendMode('ADD'), 3900);
       // Heat shimmer particles (rising wisps)
       const cfg = throttleConfig({
         x: { min: 0, max: w }, y: h + 10, lifespan: 3000,
@@ -253,8 +263,8 @@ export default class EnvSystem {
         alpha: { start: 0.12, end: 0 }, scale: { min: 1.5, max: 3 },
         tint: 0xffddaa
       });
-      if (cfg) this.fogEmitter = this.scene.add.particles(0, 0, 'pt_snow', cfg)
-        .setDepth(3900).setScrollFactor(0);
+      if (cfg) this.fogEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_snow', cfg), 3900, { mode: 'anchor' });
     }
   }
 
@@ -337,11 +347,13 @@ export default class EnvSystem {
     const skyR = (skyHex >> 16) & 255, skyG = (skyHex >> 8) & 255, skyB = skyHex & 255;
     setSkyColor(skyR, skyG, skyB);
     if (this.sunSprite) {
-      // The sun sprite is screen-fixed (scrollFactor=0). Convert to world
-      // coords by adding camera scroll so the water shader can position
-      // glints relative to the camera.
+      // The sun lives in the screen layer, so its x/y are layer-local. Convert
+      // to screen, then to world, so the water shader can position glints
+      // relative to the camera.
       const cam = this.scene.cameras.main;
-      setSunPosition(cam.scrollX + this.sunSprite.x, cam.scrollY + this.sunSprite.y);
+      const [sunX, sunY] = screenPoint(this.scene.scale.width, this.scene.scale.height,
+        [this.sunSprite.x, this.sunSprite.y]);
+      setSunPosition(cam.scrollX + sunX, cam.scrollY + sunY);
     }
 
     // Night fireflies
@@ -359,8 +371,8 @@ export default class EnvSystem {
         frequency: 350,
         blendMode: 'ADD'
       });
-      if (cfg) this.fireflyEmitter = this.scene.add.particles(0, 0, 'pt_firefly', cfg)
-        .setDepth(3905).setScrollFactor(0);
+      if (cfg) this.fireflyEmitter = addScreenOverlay(this.scene,
+        this.scene.add.particles(0, 0, 'pt_firefly', cfg), 3905, { mode: 'anchor' });
     } else if (!isNight && this.fireflyEmitter) {
       this.fireflyEmitter.destroy();
       this.fireflyEmitter = null;

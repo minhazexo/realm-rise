@@ -100,5 +100,23 @@ export const BOSSES: Record<string, EnemyDef> = {
     palette: { stone: '#5a6470', rune: '#5ad0c0' },
     loot: [ { id: 'ancient_core', chance: 1, min: 1, max: 1 }, { id: 'moonstone', chance: 0.7, min: 1, max: 2 }, { id: 'legendary_aegis', chance: 0.5, min: 1, max: 1 } ],
     goldDrop: 800
+  },
+  warden_of_ash: {
+    key: 'warden_of_ash', name: 'The Warden of Ash', sheetKey: 'hu_captain', scale: 1.5, team: ENEMY_TEAMS.monster,
+    boss: true, arenaRadius: 560,
+    hp: 700, atk: 26, def: 9, speed: 126, detect: 900, attackRange: 54, attackCd: 1.25,
+    windupSec: 0.5, radius: 18, xp: 450,
+    style: 'boss',
+    // Fire-bound corrupted warden: frost and holy bite; its own flame slides off.
+    weak: ['ice', 'holy'], resist: ['fire'],
+    // Phase 1 teaches the pattern (combo + ground strike, both windup-gated);
+    // Phase 2 adds the telegraphed fire nova, fire bolts and 1.2× tempo.
+    phases: [
+      { belowHp: 1, moves: ['combo_charge', 'ground_slam'] },
+      { belowHp: 0.55, moves: ['fire_slam', 'throw_axe', 'combo_charge'], enrageSpeed: 1.2 }
+    ],
+    palette: { skin: '#8a6a5a', cloth: '#3c2a26', plume: true },
+    loot: [ { id: 'ash_ember', chance: 1, min: 2, max: 3 }, { id: 'steel_ingot', chance: 0.8, min: 1, max: 2 }, { id: 'ancient_core', chance: 0.35, min: 1, max: 1 } ],
+    goldDrop: 320
   }
 };

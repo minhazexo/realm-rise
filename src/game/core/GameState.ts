@@ -175,6 +175,17 @@ class GameStore {
     for (const k of keys) Bus.emit(k);
   }
 
+  /* ── dialogue ─────────────────────────────────────────────────────────── */
+  // Dialogue lives in `session` (UI-only), but the React modal is a
+  // useSyncExternalStore consumer: clearing the field without notifying the
+  // channel leaves the modal on screen forever. Keeping the write and the
+  // notify together here gives every close path one owner.
+  closeDialogue(): void {
+    if (this.session.dialogue === null) return;
+    this.session.dialogue = null;
+    Bus.emit(CH.DIALOGUE);
+  }
+
   toast({ title, msg, kind = 'info', icon, dur = 3800 }: ToastOptions): void {
     Bus.emit(CH.TOAST, { title, msg, kind, icon, dur });
   }

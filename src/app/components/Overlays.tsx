@@ -277,14 +277,11 @@ export function Dialogue(): JSX.Element | null {
     } else if (fn === 'openTrade') {
             import('../../game/main.ts').then((m: any) => m.worldScene()?.openTradeFor?.(arg));
     }
-    if (fn !== 'openTrade') {
-      GameState.session.dialogue = null;
-            import('../../game/core/EventBus.ts').then(({ Bus }: any) => Bus.emit('UI', null));
-    }
+    if (fn !== 'openTrade') GameState.closeDialogue();
   };
 
   return (
-    <div className="dialogue-backdrop" onClick={() => { GameState.session.dialogue = null; }}>
+    <div className="dialogue-backdrop" onClick={() => GameState.closeDialogue()}>
       <div className="dialogue" onClick={(e) => e.stopPropagation()}>
         <div className="dlg-portrait" style={{ background: d.portrait }} />
         <div className="dlg-body">
@@ -295,7 +292,7 @@ export function Dialogue(): JSX.Element | null {
               {(d.actions ?? []).map((a, i) => <button key={i} className="btn btn-small" onClick={() => run(a.fn, a.arg)}>{a.label}</button>)}
             </div>
           )}
-          <button className="btn btn-small dlg-close" onClick={() => { GameState.session.dialogue = null; }}>Farewell</button>
+          <button className="btn btn-small dlg-close" onClick={() => GameState.closeDialogue()}>Farewell</button>
         </div>
       </div>
     </div>

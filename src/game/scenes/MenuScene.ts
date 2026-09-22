@@ -3,8 +3,11 @@
 // fireflies, richer embers, subtle camera drift. React UI sits on top.
 import Phaser from 'phaser';
 import { buildFxProps, buildMenuProps } from '../assets/propsFx.ts';
+import { buildNatureProps } from '../assets/propsNature1.ts';
+import { makePlayerSheet } from '../assets/index.ts';
 import GameState from '../core/GameState.ts';
 import { CH } from '../core/EventBus.ts';
+import { particleMultiplier, reducedMotion } from '../systems/SettingsSystem.ts';
 
 interface Star {
   x: number;
@@ -29,6 +32,19 @@ interface BirdEntry {
   baseY: number;
 }
 
+/** A lone survivor wandering the near ridge (animated title figure). */
+interface Wanderer {
+  s: Phaser.GameObjects.Sprite;
+  pauseT: number;
+  vx: number;
+}
+
+/** Background travellers crossing the mid hills. */
+interface HikerEntry {
+  s: Phaser.GameObjects.Sprite;
+  vx: number;
+}
+
 export default class MenuScene extends Phaser.Scene {
   starGfx!: Phaser.GameObjects.Graphics;
   stars: Star[] = [];
@@ -38,6 +54,9 @@ export default class MenuScene extends Phaser.Scene {
   castle!: Phaser.GameObjects.Image;
   clouds: CloudEntry[] = [];
   birds: BirdEntry[] = [];
+  wanderer: Wanderer | null = null;
+  hikers: HikerEntry[] = [];
+  fogBanks: { s: Phaser.GameObjects.Image; speed: number }[] = [];
 
   constructor() {
     super('MenuScene');
@@ -47,6 +66,17 @@ export default class MenuScene extends Phaser.Scene {
     // FX textures (pt_spark, proj_fireball, etc.) are required by the menu backdrop
     buildFxProps(this);
     buildMenuProps(this);
+    // World nature textures for the foreground treeline, and the player
+    // sheet for the wanderer figure (WorldScene also builds these; the menu
+    // boots first, so it must be self-sufficient). Only build when absent —
+    // never clobber an appearance customized on an existing save.
+    buildNatureProps(this);
+    if (!this.textures.exists('player_char')) {
+      makePlayerSheet(this, {
+        skin: '#caa27c', hairstyle: 'short', hairColor: '#4a3222',
+        gender: 'm', tierIdx: 0,
+      });
+    }
     const W: number = this.scale.width;
     const H: number = this.scale.height;
     this.cameras.main.setBackgroundColor('#060910');
@@ -149,7 +179,8 @@ export default class MenuScene extends Phaser.Scene {
       });
     }
 
-    // ── Rising embers ────────────────────────────────────────────────────
+    // ── Rising embers (density respects the particle settings) ──────────
+    const pm: number = Math.max(0.25, particleMultiplier());
     this.add.particles(0, H + 10, 'pt_spark', {
       x: { min: 0, max: W },
       y: H + 10,
@@ -159,7 +190,7 @@ export default class MenuScene extends Phaser.Scene {
       scale: { start: 0.7, end: 0 },
       alpha: { start: 0.55, end: 0 },
       quantity: 1,
-      frequency: 90,
+      frequency: Math.round(90 / pm),
       tint: [0xffb45a, 0xff8c3a, 0xffd080]
     }).setDepth(7);
 
@@ -177,6 +208,89 @@ export default class MenuScene extends Phaser.Scene {
       tint: [0xc9e8ff, 0xffe8a0, 0xd0c0ff],
       blendMode: 'ADD'
     }).setDepth(8);
+
+    // ── Atmospheric layers: midground travellers + foreground frame ──────
+    const motion: boolean = !reducedMotion();
+
+    // Walking animations for the menu figures (real player-sheet frames:
+    // the wanderer IS the character you will play).
+    if (!this.anims.exists('wanderer_walk')) {
+      this.anims.create({ key: 'wanderer_walk', frames: [
+        { key: 'player_char', frame: 'left_0' },
+        { key: 'player_char', frame: 'left_1' },
+        { key: 'player_char', frame: 'left_2' },
+        { key: 'player_char', frame: 'left_1' }
+      ], frameRate: 5, repeat: -1 });
+      this.anims.create({ key: 'wanderer_walk_back', frames: [
+        { key: 'player_char', frame: 'up_0' },
+        { key: 'player_char', frame: 'up_1' },
+        { key: 'player_char', frame: 'up_2' },
+        { key: 'player_char', frame: 'up_1' }
+      ], frameRate: 5, repeat: -1 });
+    }
+
+    // Background travellers on the mid ridge (small, dark, slow).
+    for (let i: number = 0; i < 2; i++) {
+      const hiker: Phaser.GameObjects.Sprite = this.add.sprite(
+        W * (0.3 + i * 0.42),
+        H * (0.735 - i * 0.02),
+        'player_char', 'left_1'
+      ).setScale(0.6).setAlpha(0.55).setTint(0x5a6c86).setDepth(6.5);
+      this.hikers.push({ s: hiker, vx: 6 + i * 3 });
+      if (motion) hiker.play('wanderer_walk');
+    }
+
+    // The wanderer: crossing the near ridge toward the ruined castle —
+    // a survivor pausing to look out over the fallen kingdom.
+    const wanderer: Phaser.GameObjects.Sprite = this.add.sprite(W * 0.16, H * 0.795, 'player_char', 'down_1')
+      .setScale(1.25)
+      .setTint(0x8fa3bd)
+      .setDepth(12);
+    this.wanderer = { s: wanderer, pauseT: 2.5, vx: 9 };
+    if (motion) wanderer.play('wanderer_walk_back');
+
+    // Distant campfire glow in the ruins — someone survived down there.
+    this.add.image(W * 0.24, H * 0.735, 'proj_fireball')
+      .setScale(3.2).setAlpha(0.1).setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xff8c3a).setDepth(4.8);
+
+    // Slow fog banks rolling across the valley floor.
+    this.fogBanks = [];
+    for (let i: number = 0; i < 4; i++) {
+      const fogBank: Phaser.GameObjects.Image = this.add.image(
+        Math.random() * W,
+        H * (0.68 + Math.random() * 0.16),
+        'menu_cloud'
+      )
+        .setScale(1.6 + Math.random() * 1.4)
+        .setAlpha(0.05 + Math.random() * 0.07)
+        .setTint(0x9fb8d8)
+        .setDepth(15);
+      this.fogBanks.push({ s: fogBank, speed: 4 + Math.random() * 5 });
+    }
+
+    // Foreground treeline: near-black silhouettes framing the bottom edge,
+    // swaying gently. Reads as depth: hills (far) → castle (mid) →
+    // wanderer (near) → treeline (foreground).
+    for (let i: number = 0; i < 9; i++) {
+      const tx: number = (i / 8) * W + (Math.random() - 0.5) * 70;
+      const tree: Phaser.GameObjects.Image = this.add.image(tx, H + 26, Math.random() < 0.6 ? 'tree_oak' : 'tree_pine')
+        .setOrigin(0.5, 1)
+        .setScale(1.5 + Math.random() * 1.1)
+        .setTint(0x0d141c)
+        .setAlpha(0.96)
+        .setDepth(14);
+      if (motion) {
+        this.tweens.add({
+          targets: tree,
+          angle: { from: -1.1, to: 1.1 },
+          duration: 3400 + Math.random() * 2200,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.inOut'
+        });
+      }
+    }
 
     // ── Subtle parallax drift ────────────────────────────────────────────
     this.tweens.add({
@@ -262,6 +376,42 @@ export default class MenuScene extends Phaser.Scene {
         b.s.x = -50;
         b.baseY = 50 + Math.random() * this.scale.height * 0.28;
         b.s.y = b.baseY;
+      }
+    }
+
+    // fog banks drifting across the valley floor
+    for (const f of this.fogBanks) {
+      f.s.x += f.speed * dt;
+      if (f.s.x > this.scale.width + 260) f.s.x = -260;
+    }
+
+    // background travellers on the mid ridge
+    for (const h of this.hikers) {
+      h.s.x += h.vx * dt;
+      if (h.s.x > this.scale.width + 30) h.s.x = -30;
+    }
+
+    // the wanderer: walks the ridge, pauses to gaze at the castle, moves on
+    const w = this.wanderer;
+    if (w) {
+      if (w.pauseT > 0) {
+        w.pauseT -= dt;
+        if (w.pauseT <= 0) {
+          w.vx = 8 + Math.random() * 4;
+          w.s.play(reducedMotion() ? 'wanderer_walk' : (Math.random() < 0.5 ? 'wanderer_walk' : 'wanderer_walk_back'));
+          w.s.setFlipX(Math.random() < 0.4);
+        }
+      } else {
+        w.s.x += w.vx * dt;
+        // small chance to stop and gaze at the ruins
+        if (Math.random() < dt * 0.12) {
+          w.pauseT = 1.8 + Math.random() * 2.4;
+          w.s.stop();
+          w.s.setFrame(w.s.flipX ? 'left_1' : 'down_1');
+        }
+        // wrap at the screen edges
+        if (w.s.x > this.scale.width + 30) { w.s.x = -30; w.pauseT = 1 + Math.random(); }
+        if (w.s.x < -30) { w.s.x = this.scale.width + 30; w.pauseT = 1 + Math.random(); }
       }
     }
   }

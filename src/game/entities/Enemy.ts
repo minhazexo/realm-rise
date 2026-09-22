@@ -57,6 +57,10 @@ export default class Enemy {
   _hpBarH: number = 0;
   _hpBarY: number = 0;
   hpBar!: Phaser.GameObjects.Graphics | null;
+  /** Elite variant dressing (vertical slice §7): aura + nameplate. */
+  elite: boolean = false;
+  eliteAura: Phaser.GameObjects.Ellipse | null = null;
+  eliteTag: Phaser.GameObjects.Text | null = null;
 
   constructor(scene: Phaser.Scene, defKey: string, x: number, y: number) {
     this.scene = scene;
@@ -93,6 +97,18 @@ export default class Enemy {
     this.windingUp = false;
     this.fleeUnderHpPct = this.def.fleeBelowHpPct ?? 0;
     this.boss = !!this.def.boss;
+    this.elite = !!this.def.elite;
+    if (this.elite) {
+      // Subtle elite presence: low-alpha additive aura + nameplate. No
+      // particle spam — the aura reads at a glance without hiding the sprite.
+      const r: number = this.def.radius || 14;
+      this.eliteAura = scene.add.ellipse(x, y + 6, r * 4.6, r * 2.8, 0xff4d4d, 0.16)
+        .setDepth(49).setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: this.eliteAura, alpha: { from: 0.09, to: 0.24 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.eliteTag = scene.add.text(x, y - 30, this.def.name, {
+        fontFamily: 'Georgia, serif', fontSize: '11px', color: '#ffb3a0', stroke: '#1a0f0c', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(201);
+    }
     this.dir = 'down';
     this.walkPhase = 0;
     this._walkTimer = 0;
@@ -102,7 +118,7 @@ export default class Enemy {
     this.pounceCd = 0;
     this._hpBarTimer = 0;
     this._hpBarAlpha = 0;
-    this._hpBarW = this.boss ? 56 : (isQuad ? 44 : 34);
+    this._hpBarW = this.boss ? 56 : this.elite ? 48 : (isQuad ? 44 : 34);
     this._hpBarH = this.boss ? 6 : 4.5;
     this._hpBarY = isQuad ? -14 : -18;
     this.setupHealthBar();
@@ -149,6 +165,11 @@ export default class Enemy {
 
   update(dt: number, ctx: any): void {
     if (this.dead) return;
+    // Elite dressing follows the sprite every frame (before any early-out).
+    if (this.eliteAura) {
+      this.eliteAura.setPosition(this.sprite.x, this.sprite.y + 6);
+      this.eliteTag?.setPosition(this.sprite.x, this.sprite.y - 30);
+    }
     const S = GameState.s;
     const p = this.player;
     if (!p || !p.sprite || S.session_dead) {
@@ -174,6 +195,10 @@ export default class Enemy {
             this.state = STATE.DEAD;
             this.hpBar?.destroy();
             this.hpBar = null;
+            this.eliteAura?.destroy();
+            this.eliteAura = null;
+            this.eliteTag?.destroy();
+            this.eliteTag = null;
             this.shadow?.destroy();
             this.shadow = null;
             this.sprite.destroy();
@@ -434,7 +459,7 @@ export default class Enemy {
       if (dNow > effRange) return;
       if (def.ranged) {
         (this.scene as any).spawnProjectile({
-          kind: 'arrow', x: this.sprite.x, y: this.sprite.y - 12,
+          kind: def.projectileKind || 'arrow', x: this.sprite.x, y: this.sprite.y - 12,
           angle: Math.atan2(p.sprite.y - this.sprite.y, p.sprite.x - this.sprite.x),
           speed: def.projectileSpeed || 480, maxDist: def.attackRange, dmg, crit: 0.05, owner: 'enemy', enemy: this
         });
@@ -522,7 +547,10 @@ export default class Enemy {
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     if (this.shadow) { this.shadow.setVisible(false); this.shadow.destroy(); this.shadow = null; }
     if (this.hpBar) { this.hpBar.setVisible(false); this.hpBar.destroy(); this.hpBar = null; }
+    if (this.eliteAura) { this.eliteAura.destroy(); this.eliteAura = null; }
+    if (this.eliteTag) { this.eliteTag.destroy(); this.eliteTag = null; }
     (this.scene as any).fxDeath?.(this.sprite.x, this.sprite.y);
+    if (this.elite) (this.scene as any).spawnBurst?.(this.sprite.x, this.sprite.y, 'fx_ring');
     this.scene.tweens.add({ targets: this.sprite, alpha: 0, y: this.sprite.y + 8, duration: 260, onComplete: () => this.sprite.destroy() });
 
     for (const item of this.rollLoot()) (this.scene as any).dropLoot(this.sprite.x, this.sprite.y, item.id, item.qty);
@@ -547,7 +575,7 @@ export default class Enemy {
     } catch { /* cosmetic */ }
     // ── Combat reward: stamina restore on kill ──────────────────────────
     // Rewards aggressive play and creates exciting kill chains.
-    const killStamina: number = this.boss ? 25 : 6;
+    const killStamina: number = this.boss ? 25 : this.elite ? 14 : 6;
     GameState.s.player.stamina = Math.min(
       GameState.s.player.derived?.maxStamina || 100,
       GameState.s.player.stamina + killStamina

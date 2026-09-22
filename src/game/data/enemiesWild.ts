@@ -69,6 +69,12 @@ export interface EnemyDef {
   /** Elements this enemy takes reduced damage from. */
   resist?: string[];
   phases?: EnemyPhase[];
+  /** Elite variant: subtle aura + nameplate, drawn by Enemy. */
+  elite?: boolean;
+  /** Elite lineage: the common enemy this variant promotes from. */
+  baseOf?: string;
+  /** Projectile visual for ranged enemies ('arrow' | 'fireball' | 'magic'). */
+  projectileKind?: string;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {

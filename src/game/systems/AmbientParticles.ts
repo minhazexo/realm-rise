@@ -17,6 +17,7 @@
 import GameState from '../core/GameState.ts';
 import { biomeAt } from '../world/worldGen.ts';
 import { particleMultiplier, reducedMotion } from './SettingsSystem.ts';
+import { addScreenOverlay } from './ScreenOverlays.ts';
 
 type Emitter = Phaser.GameObjects.Particles.ParticleEmitter;
 
@@ -63,6 +64,9 @@ function updateLeaves(scene: AmbientScene, biome: string, mult: number): void {
 }
 
 function ensureBird(scene: AmbientScene): Emitter | null {
+  // The caches are module-level, so a scene restart must not hand back an
+  // emitter that belongs to the previous (destroyed) scene.
+  if (_birdEmitter && _birdEmitter.scene !== scene) _birdEmitter = null;
   if (_birdEmitter || !scene.textures.exists('menu_bird_f1')) return null;
   _birdEmitter = scene.add.particles(0, 0, 'menu_bird_f1', {
     x: { min: -200, max: scene.scale.width + 200 },
@@ -75,7 +79,8 @@ function ensureBird(scene: AmbientScene): Emitter | null {
     maxParticles: 6,
     scale: 0.8,
     alpha: 0.7
-  }).setDepth(3000).setScrollFactor(0);
+  });
+  addScreenOverlay(scene, _birdEmitter, 3000, { mode: 'anchor' });
   return _birdEmitter;
 }
 
@@ -98,6 +103,7 @@ function ensurePollen(scene: AmbientScene, biome: string): Emitter | null {
 }
 
 function ensureMist(scene: AmbientScene): Emitter | null {
+  if (_mistEmitter && _mistEmitter.scene !== scene) _mistEmitter = null;
   if (_mistEmitter) return _mistEmitter;
   if (!scene.textures.exists('pt_smoke')) return null;
   _mistEmitter = scene.add.particles(0, 0, 'pt_smoke', {
@@ -111,7 +117,8 @@ function ensureMist(scene: AmbientScene): Emitter | null {
     quantity: 1,
     frequency: 1200,
     tint: 0xb0c4d8
-  }).setDepth(3550).setScrollFactor(0).setBlendMode('NORMAL');
+  }).setBlendMode('NORMAL');
+  addScreenOverlay(scene, _mistEmitter, 3550, { mode: 'anchor' });
   return _mistEmitter;
 }
 

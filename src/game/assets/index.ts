@@ -13,6 +13,7 @@
 import { makeHumanoidSheet } from './sheetsHuman.ts';
 import { makeQuadrupedSheet } from './sheetsQuad.ts';
 import { buildNatureProps } from './propsNature1.ts';
+import { buildAshenProps } from './propsAshen.ts';
 import { buildRockProps, buildFloraProps, buildRuinsProps } from './propsNature2.ts';
 import { buildStructureProps1 } from './propsStructures1.ts';
 import { buildStructureProps2 } from './propsStructures2.ts';
@@ -79,6 +80,9 @@ export function buildAllAssets(scene: Phaser.Scene): void {
   buildStructureProps3(scene);
   buildFxProps(scene);
   buildMenuProps(scene);
+  // Ashen Frontier story props (blood/footprints/scorch, wrecked cart,
+  // broken signs, cage frame) — the region's environmental storytelling.
+  buildAshenProps(scene);
 
   // ── Player sheet ──────────────────────────────────────────────────────
   // (appearance resolved later via refreshPlayerTexture on equip change)

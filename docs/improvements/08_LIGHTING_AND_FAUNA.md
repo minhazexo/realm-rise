@@ -88,3 +88,42 @@ Driving the real game at night and around lakes surfaced:
   photosensitivity settings can zero it).
 - **Grass interaction with fauna** — trample under deer herds, chaff when they
   bolt (GrassField already exposes per-slab trample).
+
+---
+
+## Screen-space overlay ownership (2026-09-22)
+
+Every overlay that has to sit in screen space — night mask, flat night
+darkening, dawn/dusk grade, sky glow, stars, sun/moon, both vignettes, weather
+tints and the screen-space particle emitters (rain, snow, fog, heat, ash,
+fireflies, birds, mist) — now goes through one owner:
+`src/game/systems/ScreenOverlays.ts`.
+
+**Root cause it fixes:** the camera zoom applies to `scrollFactor(0)` objects
+too — scrollFactor removes parallax, not zoom. A full-screen overlay sized to
+the canvas therefore drew as a centred rectangle covering exactly zoom×100 % of
+the viewport, which is why night in the forest (zoom 0.6) was a hard dark box
+with bright terrain at its edges.
+
+| Problem | Fix |
+| --- | --- |
+| Overlays scaled by camera zoom | One container pinned to the camera midpoint at scale `1/zoom`: `screen = zoom × (local + container − midpoint) + midpoint = local + midpoint`, so an overlay only ever sizes itself to the viewport. A second UI camera was rejected — it would need an `ignore()` entry for every display-list object, re-applied as chunks, enemies and loot stream in |
+| Five copies of the sizing math | Three declared placement modes (`fill` / `pin` / `anchor`); `fitScreenLayer()` re-places every entry when zoom or canvas size changes and no-ops otherwise |
+| Overlays lagging a zoom change | Fit now runs every frame; the old every-4th-frame gate left overlays sized for a stale zoom, so night/weather showed bright edge bands while `applyCamZoom` lerped |
+| Dead overlays left registered | Prune runs *before* the zoom/size early-return, and the empty `obj.destroyed` checks became `isDestroyed()` — Phaser 4 has no `destroyed` flag, it clears `active`, so the old guards never fired |
+| No ashfall | New `ash` weather state (grey veil + drifting flakes), rolled in the volcanic / Emberwaste biome — the brief's §18 ASH atmosphere |
+
+The audit's "dead alpha-0 rects" are **not** dead: they are the night
+darkening and the dawn/dusk grade, both written every frame from `timeOfDay`
+(alpha 0 by day, 0.25 residual at night when the mask carries the darkness).
+They were kept, not deleted.
+
+**Verification (live, in the running region).** A magenta probe registered
+through the owner fills the canvas with zero uncovered pixels at zoom 0.6 and 2,
+driven through the real `camZoom` setting and combat-bias path; every `fill`
+overlay covers the viewport at zoom 0.6 / 0.96 / 1 / 1.5 / 2; FOG and ASH were
+verified at both extremes; night, weather and vignette states are all
+edge-to-edge. Ninety weather switches leave the layer at exactly its nine base
+entries — no leak. Residual rectangles seen while testing were traced to terrain
+chunk tinting, not overlays, by hiding the layer. `tests/overlays.mjs` (in
+`npm test`) locks the transform, placement, prune and scene-restart paths.

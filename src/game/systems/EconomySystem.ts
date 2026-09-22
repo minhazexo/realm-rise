@@ -37,21 +37,22 @@ export interface PriceContextOpts {
 }
 
 /**
- * Price context: { biomeId, bonus, sellBase }.
- * marketTier narrows the spread; trade/faction bonuses shift both sides.
- * (marketTier intentionally absent from the returned context — merchantStock
- * reads it from caller-augmented contexts.)
+ * Price context: { biomeId, bonus, sellBase, marketTier }.
+ * marketTier narrows the spread and selects which stock tiers the merchant
+ * carries; trade/faction bonuses shift both sides. It must survive into the
+ * returned context — merchantStock reads it, and a context without it makes
+ * every merchant stock list empty.
  */
 export interface PriceContext {
   biomeId: string;
   bonus: number;
   sellBase: number;
-  marketTier?: number;
+  marketTier: number;
 }
 
 export function makeContext({ biomeId = 'forest', tradeBonusPct = 0, factionBonusPct = 0, marketTier = 0 }: PriceContextOpts = {}): PriceContext {
   const spread: number = Math.max(0.22, TRADE_SPREAD.sellMult - marketTier * 0.02);
-  return { biomeId, bonus: 1 + tradeBonusPct + factionBonusPct, sellBase: spread };
+  return { biomeId, bonus: 1 + tradeBonusPct + factionBonusPct, sellBase: spread, marketTier };
 }
 
 export function buyPrice(itemId: string, ctx: PriceContext): number {
@@ -83,7 +84,7 @@ export function merchantStock(ctx: PriceContext): StockEntry[] {
     ['steel_ingot', 'healing_salve', 'iron_plate', 'helm_iron', 'longbow', 'whetstone', 'repair_kit', 'treasure_map'],
     ['steel_sword', 'steel_plate', 'crossbow', 'fishing_rod', 'herb_tea', 'stamina_tonic', 'silver', 'gold_nugget']
   ];
-  const stageTier: number = Math.min(3, ctx.marketTier as number);
+  const stageTier: number = Math.max(0, Math.min(3, ctx.marketTier | 0));
   const pool: string[] = [];
   for (let t = 0; t <= stageTier; t++) {
     const tier: string[] | undefined = tierStock[t];

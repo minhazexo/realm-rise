@@ -56,7 +56,9 @@ interface EquippedItem {
 }
 
 interface RecipeCompare {
+  note?: string;
   dmgDelta?: number;
+  armorDelta?: number;
   equippedId?: string;
   critDelta?: number;
 }
@@ -421,13 +423,17 @@ function CraftingPanel(): JSX.Element {
                     <span key={id} className={countItem(id) >= n ? 'have' : 'need'}>{getItem(id)?.name}×{n}</span>
                   ))}
                 </div>
-                {r.compare && r.compare.dmgDelta != null && r.compare.equippedId && (
+                {r.compare && r.compare.equippedId && (
                   <span className="compare-line">
-                    vs equipped: <span className={r.compare.dmgDelta >= 0 ? 'have' : 'need'}>
-                      {r.compare.dmgDelta >= 0 ? '+' : ''}{r.compare.dmgDelta} dmg
+                    vs equipped: <span className={(r.compare.dmgDelta ?? r.compare.armorDelta ?? 0) >= 0 ? 'have' : 'need'}>
+                      {(r.compare.dmgDelta ?? r.compare.armorDelta ?? 0) >= 0 ? '+' : ''}
+                      {r.compare.dmgDelta != null ? `${r.compare.dmgDelta} dmg` : `${r.compare.armorDelta} armor`}
                     </span>
                     {(r.compare.critDelta ?? 0) !== 0 && <span> {(r.compare.critDelta ?? 0) > 0 ? '+' : ''}{((r.compare.critDelta ?? 0) * 100).toFixed(0)}% crit</span>}
                   </span>
+                )}
+                {r.compare && !r.compare.equippedId && r.compare.note && (
+                  <span className="compare-line">{r.compare.note} — pure upgrade</span>
                 )}
                 {r.reason && <em className="locked-reason">{r.reason}</em>}
               </div>
@@ -964,6 +970,7 @@ function TradePanel(): JSX.Element {
       <h2>Trade {npc?.key ? <span className="gold">· {npc.key}</span> : null} <span className="gold">🪙 {data.gold}</span></h2>
       <h3>Merchant stock</h3>
       <div className="recipe-grid">
+        {data.stock.length === 0 && <em>Nothing in stock.</em>}
         {data.stock.map((s) => (
           <button key={s.id} className="recipe" onClick={() => doBuy(s)} disabled={data.gold < s.buy}>
             <Icon id={s.id} size={30} />

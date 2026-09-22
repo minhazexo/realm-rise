@@ -47,6 +47,26 @@ export const NPCS: Record<string, NpcDef> = {
       'I can swing an axe or haul stone. Just point me somewhere useful.'
     ]
   },
+  // ── Ashen Frontier hub (map brief §5) ────────────────────────────────────
+  mara: {
+    key: 'mara', name: 'Mara', role: 'survivor', portrait: '#b8875a',
+    personality: 'grieving',
+    questGiver: 'sq_echoes_of_ash',
+    dialogue: [
+      'You came up the road alive. That is more than the carters managed.',
+      'The anvil, south of the shrine — Oren kept it lit even after the smithy burned. Stand at it and hammer your gear better than you came in with.',
+      'The Veil took the frontier in one night. I counted the dead until I ran out of names.',
+      'Search the watchtower. Then we will talk about what is burning out at the pyre.'
+    ]
+  },
+  corvin: {
+    key: 'corvin', name: 'Corvin the Pedlar', role: 'merchant', portrait: '#9a7d4f',
+    personality: 'wry', merchant: true,
+    dialogue: [
+      'Everything is for sale. Some of it is even mine.',
+      'Cheap steel, honest rope, and a map that is only slightly wrong.'
+    ]
+  },
   elara: {
     key: 'elara', name: 'Elara the Hunter', role: 'hunter', portrait: '#7d5936',
     personality: 'stoic', skillRate: 1.2, hunterAura: true,

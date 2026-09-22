@@ -35,8 +35,13 @@ export default class BossEnemy extends Enemy {
     // phase transitions based on hp %
     const pct: number = this.hp / this.maxHp;
     const phases: any[] = this.def.phases || [];
-    let idx: number = phases.findIndex((ph) => pct <= ph.belowHp);
-    if (idx < 0) idx = 0;
+    // Deepest threshold the current hp has crossed (phases descend 1 → 0.55 …).
+    // A plain findIndex always matched phase 0's belowHp:1 and phase-locked
+    // every boss at Phase 1 — walk from the deepest phase instead.
+    let idx: number = 0;
+    for (let i: number = phases.length - 1; i > 0; i--) {
+      if (pct <= phases[i].belowHp) { idx = i; break; }
+    }
     if (idx !== this.phaseIndex) {
       this.phaseIndex = idx;
       const ph = phases[idx];
@@ -143,6 +148,23 @@ export default class BossEnemy extends Enemy {
         if (d < 120) this.hitPlayer(p, 1.1);
         Bus.emit('play-sound', 'build_thud');
         break;
+      case 'fire_slam': {
+        // Telegraphed fire nova (Warden of Ash): ash-red tint + ground ring
+        // during the windup, then a 150px AoE — visible, dodgeable, never instant.
+        setCd(3.8);
+        this.sprite.setTint(0xff6a3a);
+        (this.scene as any).spawnBurst?.(this.sprite.x, this.sprite.y, 'fx_ring');
+        Bus.emit('play-sound', 'boss_roar');
+        this.scene.time.delayedCall(650, () => {
+          if (this.dead) return;
+          this.sprite.clearTint();
+          (this.scene as any).fxSlam?.(this.sprite.x, this.sprite.y, 150);
+          if (shakeAllowed()) this.scene.cameras.main.shake(200, 0.006);
+          const dd: number = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, p.sprite.x, p.sprite.y);
+          if (dd < 150 + 24) this.hitPlayer(p, 1.35);
+        });
+        break;
+      }
       case 'shockwave':
         setCd(4.4);
         (this.scene as any).shockwaveFx?.(this.sprite.x, this.sprite.y);

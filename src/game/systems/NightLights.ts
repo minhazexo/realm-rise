@@ -14,6 +14,7 @@
 // by day (image hidden) and when document/canvas is unavailable (tests).
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
+import { addScreenOverlay, fitScreenLayer, isDestroyed } from './ScreenOverlays.ts';
 import { collectWantedLights } from './DynamicLights.ts';
 
 const TEX_KEY = 'night_mask';
@@ -47,11 +48,18 @@ function maskDims(scene: NightScene): { w: number; h: number } {
 
 function ensureMask(scene: NightScene): Phaser.Textures.CanvasTexture | null {
   const { w, h } = maskDims(scene);
+  const img: Phaser.GameObjects.Image | null | undefined = scene._nightMaskImg;
+  // A scene restart destroys the image; a stale reference would otherwise keep
+  // the mask from ever coming back (new game after a night = permanent night).
+  if (img && isDestroyed(img)) scene._nightMaskImg = null;
+
+  let stale: boolean = false;
   if (scene.textures.exists(TEX_KEY)) {
     const tex = scene.textures.get(TEX_KEY) as Phaser.Textures.CanvasTexture;
     // Window resized? Rebuild the canvas so the aspect stays exact.
     if (tex.width !== w || tex.height !== h) {
       scene.textures.remove(TEX_KEY);
+      stale = true;
     } else {
       return tex;
     }
@@ -60,11 +68,12 @@ function ensureMask(scene: NightScene): Phaser.Textures.CanvasTexture | null {
   const tex: Phaser.Textures.CanvasTexture | null = scene.textures.createCanvas(TEX_KEY, w, h);
   if (!tex) return null;
   if (!scene._nightMaskImg) {
-    scene._nightMaskImg = scene.add.image(0, 0, TEX_KEY)
-      .setOrigin(0)
-      .setDepth(3960)
-      .setScrollFactor(0)
-      .setVisible(false);
+    // Into the screen layer: it owns the viewport sizing (see ScreenOverlays).
+    scene._nightMaskImg = addScreenOverlay(scene, scene.add.image(0, 0, TEX_KEY).setVisible(false), 3960);
+  } else if (stale) {
+    // The canvas was rebuilt under the same key — re-point the image at it.
+    scene._nightMaskImg.setTexture(TEX_KEY);
+    fitScreenLayer(scene, true);
   }
   return tex;
 }
@@ -90,9 +99,6 @@ export function updateNightMask(scene: NightScene): void {
     return;
   }
   img.setVisible(true);
-  // The mask texture is a uniform downscale of the game canvas, so a plain
-  // displaySize covers the view exactly at any camera zoom.
-  img.setDisplaySize(w, h);
 
   const ctx: CanvasRenderingContext2D = tex.getContext();
   const cam: Phaser.Cameras.Scene2D.Camera = scene.cameras.main;

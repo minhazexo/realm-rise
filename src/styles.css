@@ -135,11 +135,27 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   pointer-events: none;
   background: radial-gradient(ellipse 80% 60% at 50% 40%, transparent 30%, rgba(6,9,16,0.55) 100%);
+  /* cinematic edge vignette so UI text never fights the living backdrop */
+  box-shadow: inset 0 0 140px 60px rgba(4, 6, 10, 0.72);
 }
 .menu-title-wrap {
   text-align: center; margin-bottom: 28px; pointer-events: auto;
   animation: titleIn 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* overline + underline flourishes, like an engraved title plate */
+  position: relative;
+  padding: 14px 44px;
 }
+.menu-title-wrap::before,
+.menu-title-wrap::after {
+  content: '';
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 220px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim, #8a6d3a) 22%, var(--gold-bright, #e8cf9a) 50%, var(--gold-dim, #8a6d3a) 78%, transparent);
+  opacity: 0.75;
+  pointer-events: none;
+}
+.menu-title-wrap::before { top: 0; }
+.menu-title-wrap::after { bottom: 0; }
 .menu-title {
   font-family: 'Cinzel', serif; font-size: 52px; font-weight: 900;
   letter-spacing: 6px; margin-bottom: 6px;

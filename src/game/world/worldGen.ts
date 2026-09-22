@@ -19,6 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { fbm, valueNoise, mulberry32 } from '../../utils/math.ts';
 import { BIOMES } from './biomeTable.ts';
+import { ASHEN_POIS } from '../data/regionAshen.ts';
 
 // ── World seed ──────────────────────────────────────────────────────────────
 
@@ -273,7 +274,6 @@ export function allPois(): PointOfInterest[] {
     kind: 'rescue', label: 'Scattered Wreckage',
     npc: 'tam', danger: 1,
   });
-
   // ── Ring of ruins (kind 'ruins' counts for reachCount quests) ───────
   for (let i = 0; i < RUIN_COUNT; i++) {
     const ang = (i / RUIN_COUNT) * Math.PI * 2 + rng() * 0.4;
@@ -319,6 +319,16 @@ export function allPois(): PointOfInterest[] {
       kind: 'shrine',
       label: 'Ancient Shrine',
       danger: 1,
+    });
+  }
+
+  // ── Authored region POIs (THE ASHEN FRONTIER, map brief §28) ──────────
+  // Data-driven: the region file owns names/coords/stories; worldGen only
+  // registers them so discovery, minimap fog, markers and quests all work.
+  for (const rp of ASHEN_POIS) {
+    push({
+      id: rp.id, x: rp.x, y: rp.y, kind: rp.kind, label: rp.label,
+      tag: rp.tag, danger: rp.danger, chestTier: rp.chestTier, npc: rp.npc, boss: rp.boss,
     });
   }
 

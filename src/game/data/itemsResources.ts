@@ -20,6 +20,11 @@ def('mushrooms', { cat: 'consumable', use: { food: 8, hp: 4 }, value: 3, icon: {
 def('berries', { cat: 'consumable', use: { food: 10, hp: 3 }, value: 2, icon: { shape: 'berries', c1: '#a04258' }, desc: 'Sweet enough to keep you walking. A little healing too.' });
 def('wheat', { name: 'Wheat', value: 4, icon: { shape: 'grain', c1: '#d8b74a' }, desc: 'Golden grain from the farm plots.' });
 
+// ── Elite & boss trophies (vertical slice) ───────────────────────────────
+def('bloodfang_fang', { name: 'Bloodfang Fang', rarity: 'uncommon', value: 18, icon: { shape: 'bone', c1: '#c23a3a' }, desc: 'A crimson saber of enamel. Hunters pay well for proof of the kill.' });
+def('void_ember', { name: 'Void Ember', rarity: 'rare', value: 26, icon: { shape: 'shard', c1: '#9d4dff' }, desc: 'Cold fire pinched from a Void Stalker. It hums against the palm.' });
+def('ash_ember', { name: 'Ash Ember', rarity: 'uncommon', value: 14, icon: { shape: 'lump', c1: '#ff7a2a' }, desc: 'Still-warm cinders from the Warden’s pyre. Fuel for masterwork forgings.' });
+
 // ── Food & consumables ───────────────────────────────────────────────────────
 def('raw_meat', { cat: 'consumable', use: { food: 14, hp: 2 }, value: 4, icon: { shape: 'meat', c1: '#b45454' }, desc: 'Better cooked. Much better. Sustains in a pinch.' });
 def('cooked_meat', { cat: 'consumable', use: { food: 38, hp: 12 }, value: 9, icon: { shape: 'meat', c1: '#8a512e' }, desc: 'Hearty roast that restores health and morale.' });

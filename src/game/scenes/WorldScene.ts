@@ -32,6 +32,8 @@ import {
   applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
 } from '../world/chunkPainter.ts';
 import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
+import { placeRegion, updateRegion, regionSnapshot } from '../systems/RegionSystem.ts';
+import { regionStations } from '../data/regionAshen.ts';
 
 /** Projectile tint per element (magic bolts). Falls back to arcane blue. */
 const ELEMENT_TINT: Record<string, number> = {
@@ -48,6 +50,7 @@ import { configureSpawning } from '../systems/SpawnDirector.ts';
 import * as spawnSys from '../systems/SpawnDirector.ts';
 import * as gatherSys from '../systems/GatherSystem.ts';
 import { updateNightMask } from '../systems/NightLights.ts';
+import { fitScreenLayer } from '../systems/ScreenOverlays.ts';
 import { updateFogCards } from '../systems/FogCards.ts';
 import { updateAmbientParticles, destroyAmbientParticles } from '../systems/AmbientParticles.ts';
 import { levelUpCeremony } from '../systems/CelebrationFX.ts';
@@ -203,6 +206,12 @@ export default class WorldScene extends Phaser.Scene {
 
     this.syncBuildingsFromState();
     this.spawnWildNpcs();
+    // Authored region (THE ASHEN FRONTIER): structural collision + state.
+    // Content streams in lazily as the player explores (RegionSystem).
+    placeRegion(this);
+    // The region's own crafting stations (the hub anvil). Registered once so
+    // they go through the same proximity rule as settlement buildings.
+    buildSys.setAuthoredStations(regionStations());
     this.syncPoisMarkers();
     this.refreshPlayerSkin();
     // Phase B: crafting station radius preview for the React panel.
@@ -249,12 +258,8 @@ export default class WorldScene extends Phaser.Scene {
     GameState.notify(CH.WORLD);
     this.cameras.main.fadeIn(600);
 
-    // Redraw screen-space overlays when the browser/canvas resizes.
-    this.scale.on('resize', (_gameSize: any) => {
-      this.env?.posVignette?.();
-      this.env?.skyGlow?.setDisplaySize(this.scale.width * 2, this.scale.height * 2);
-      if (this.env?.dangerVignette) this.env.dangerVignette.setDisplaySize(this.scale.width, this.scale.height);
-    });
+    // Re-fit the screen-space overlay layer when the browser/canvas resizes.
+    this.scale.on('resize', () => { try { fitScreenLayer(this, true); } catch { /* pre-boot */ } });
   }
 
   /* ── Update ─────────────────────────────────────────────────────────── */
@@ -340,6 +345,7 @@ export default class WorldScene extends Phaser.Scene {
     this.updateLoot(px, py);
     this.updateGatherProximity(px, py);
     this.updatePoiProximity(px, py);
+    updateRegion(this, px, py, dt);
     this.updateNpcs(dt, px, py);
     this.gatherTick(dt);
     // Building Occlusion Transparency: fade buildings if player is standing behind them
@@ -374,6 +380,11 @@ export default class WorldScene extends Phaser.Scene {
     if (this._frame % 4 === 0) {
       try { updateNightMask(this); } catch { /* canvas unavailable */ }
     }
+    // Fit the screen-space overlay layer AFTER this frame's zoom is applied —
+    // applyCamZoom lerps continuously, so a gated fit (it used to be every 4th
+    // frame) left the overlays sized for a stale zoom and night/weather showed
+    // bright edges while zooming. Cheap: no-ops unless zoom or canvas changed.
+    try { fitScreenLayer(this); } catch { /* pre-boot */ }
     // Phase B cadence: station proximity follows the player; chunk relight
     // tracks the clock without per-frame tint churn.
     if (this._frame % 60 === 0) {
@@ -747,8 +758,8 @@ export default class WorldScene extends Phaser.Scene {
     (GameState as any).toast({ title: `${npcDef.name} joins you!`, msg: npcDef.dialogue?.[0] || 'Welcome aboard.', kind: 'quest', dur: 4200 });
     const npc = this.npcs.find((n) => n.key === key);
     if (npc) { this.npcs = this.npcs.filter((n) => n !== npc); npc.sprite.destroy(); npc.shadow?.destroy(); }
-    (GameState.session as any).dialogue = null;
-    GameState.notify(CH.SETTLEMENT, CH.DIALOGUE, CH.PLAYER);
+    GameState.closeDialogue();
+    GameState.notify(CH.SETTLEMENT, CH.PLAYER);
     kingdomRefresh();
   }
 
@@ -1008,6 +1019,11 @@ export default class WorldScene extends Phaser.Scene {
   /* ── Minimap (delegated to systems/MinimapSystem — scene stays thin) ─── */
   updateMinimap(px: number, py: number): void {
     minimapSys.updateMinimap(this, px, py);
+  }
+
+  /** Authored-region state (live probes / debugging). */
+  regionSnapshot(): Record<string, unknown> {
+    return regionSnapshot(this);
   }
 
   /* ── Share helpers to other systems ────────────────────────────────── */

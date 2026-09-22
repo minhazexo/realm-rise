@@ -23,13 +23,15 @@ export interface CraftResult {
   refund?: Record<string, number>;
 }
 
-/** Weapon comparison shown in the crafting tooltip. */
-export interface WeaponCompare {
+/** Gear-vs-equipped comparison shown in the crafting panel. */
+export interface GearCompare {
   slot: string;
   note?: string;
   dmgDelta?: number;
   cdDelta?: number;
   critDelta?: number;
+  /** Armor pieces compare on armor rating instead of damage. */
+  armorDelta?: number;
   equippedId?: string;
 }
 
@@ -122,21 +124,31 @@ export function salvage(ref: string): CraftResult {
   return { ok: true, refund };
 }
 
-/** Compare a craftable weapon against the equipped one for smart tooltips. */
-function compareVsEquipped(outId: string): WeaponCompare | null {
+/** Compare craftable gear against what is equipped, so the stat change is visible. */
+function compareVsEquipped(outId: string): GearCompare | null {
   const def = getItem(outId);
-  if (!def?.weapon) return null;
-  const eq = st().player.equipment.weapon;
-  if (!eq) return { slot: 'weapon', note: 'No weapon equipped — upgrade' };
-  const cur = getItem(eq.id);
-  if (!cur?.weapon) return null;
-  return {
-    slot: 'weapon',
-    dmgDelta: (def.weapon.dmg || 0) - (cur.weapon.dmg || 0),
-    cdDelta: (def.weapon.cd || 0) - (cur.weapon.cd || 0),
-    critDelta: (def.weapon.crit || 0) - (cur.weapon.crit || 0),
-    equippedId: eq.id,
-  };
+  if (!def) return null;
+  const eq = st().player.equipment;
+  if (def.weapon) {
+    const held = eq.weapon;
+    const cur = held ? getItem(held.id) : null;
+    if (!held || !cur?.weapon) return { slot: 'weapon', note: 'Nothing equipped' };
+    return {
+      slot: 'weapon',
+      dmgDelta: (def.weapon.dmg || 0) - (cur.weapon.dmg || 0),
+      cdDelta: (def.weapon.cd || 0) - (cur.weapon.cd || 0),
+      critDelta: (def.weapon.crit || 0) - (cur.weapon.crit || 0),
+      equippedId: held.id,
+    };
+  }
+  const slot: string | undefined = def.slot;
+  if (def.armor && slot) {
+    const worn = eq[slot];
+    const cur = worn ? getItem(worn.id) : null;
+    if (!worn || !cur?.armor) return { slot, note: 'Nothing equipped' };
+    return { slot, armorDelta: def.armor - cur.armor, equippedId: worn.id };
+  }
+  return null;
 }
 
 /** One recipe row enriched for the crafting panel. */
@@ -145,7 +157,7 @@ export interface RecipeRow extends RecipeDef {
   reason: string | null;
   haveCounts: Record<string, number>;
   durSec: number;
-  compare: WeaponCompare | null;
+  compare: GearCompare | null;
 }
 
 /** Recipes enriched for the UI panel. */
@@ -159,4 +171,17 @@ export function recipesForUI(category = 'all'): RecipeRow[] {
     durSec: craftDurationSec(r),
     compare: compareVsEquipped(r.out),
   }));
+}
+
+/**
+ * Why nothing at this station can be made right now — or null if something
+ * can. Used when a player walks up to a station, so the interaction answers
+ * instead of silently opening an all-locked list.
+ */
+export function idleReason(station: string): string | null {
+  const rows: RecipeDef[] = RECIPES.filter((r: RecipeDef) => r.station === station);
+  const first: RecipeDef | undefined = rows[0];
+  if (!first) return 'No recipes are known for this station yet';
+  for (const r of rows) if (!blockReason(r)) return null;
+  return blockReason(first) || 'Missing resources';
 }
