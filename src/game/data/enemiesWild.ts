@@ -64,6 +64,10 @@ export interface EnemyDef {
   /** Prey animal: never attacks, flees the moment the player is detected. */
   prey?: boolean;
   nightOnly?: boolean;
+  /** Elements this enemy takes bonus damage from (ElementalSystem). */
+  weak?: string[];
+  /** Elements this enemy takes reduced damage from. */
+  resist?: string[];
   phases?: EnemyPhase[];
 }
 
@@ -134,6 +138,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
     hp: 48, atk: 12, def: 4, speed: 96, detect: 320, attackRange: 38, attackCd: 1.25,
     windupSec: 0.45, radius: 14, xp: 26, nightOnly: true,
     style: 'melee',
+    // Elemental identity: dry bones fear fire and holy, shrug at cold.
+    weak: ['fire', 'holy'], resist: ['ice'],
     palette: { bone: '#ded6bd', glow: '#7be0c3' },
     loot: [ { id: 'bone', chance: 1, min: 1, max: 3 }, { id: 'ancient_relic', chance: 0.07, min: 1, max: 1 } ],
     goldDrop: 4
@@ -143,6 +149,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
     hp: 76, atk: 15, def: 2, speed: 128, detect: 280, attackRange: 40, attackCd: 1.3,
     windupSec: 0.4, radius: 16, xp: 34,
     style: 'melee',
+    // Elemental identity: damp hides burn poorly; lightning conducts.
+    weak: ['lightning'], resist: ['fire'],
     palette: { skin: '#5d7a4a', cloth: '#3f4f33' },
     loot: [ { id: 'herbs', chance: 0.7, min: 1, max: 3 }, { id: 'crystal', chance: 0.1, min: 1, max: 1 }, { id: 'raw_fish', chance: 0.4, min: 1, max: 2 } ],
     goldDrop: 0

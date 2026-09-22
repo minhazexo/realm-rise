@@ -32,6 +32,12 @@ import {
   applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
 } from '../world/chunkPainter.ts';
 import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
+
+/** Projectile tint per element (magic bolts). Falls back to arcane blue. */
+const ELEMENT_TINT: Record<string, number> = {
+  fire: 0xff8a4a, ice: 0x9fdcff, lightning: 0xffe86b, poison: 0x9fe86b,
+  shadow: 0xb48aff, holy: 0xfff3c9, arcane: 0x9fb4e8, physical: 0xffffff
+};
 import * as lootSys from '../systems/LootSystem.ts';
 import * as buildSys from '../systems/BuildSystem.ts';
 import * as minimapSys from '../systems/MinimapSystem.ts';
@@ -828,10 +834,17 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   spawnProjectile(o: any): any {
-    const tex: string = o.kind === 'fireball' ? 'proj_fireball' : 'proj_arrow';
+    const tex: string = o.kind === 'fireball' ? 'proj_fireball' : o.kind === 'magic' ? 'fx_light' : 'proj_arrow';
     const img = this.add.image(o.x, o.y, tex).setDepth(85).setRotation(o.angle);
+    // Elemental identity: tint the bolt and add a colored trail so magic reads
+    // as its element in flight (staff line, elemental bows).
+    if (o.kind === 'magic') {
+      img.setScale(0.34);
+      img.setBlendMode(Phaser.BlendModes.ADD);
+      try { img.setTint(ELEMENT_TINT[o.element as string] ?? 0x9fb4e8); } catch { /* default tint */ }
+    }
     const dirx: number = Math.cos(o.angle), diry: number = Math.sin(o.angle);
-    const p = { img, x: o.x, y: o.y, vx: dirx * o.speed, vy: diry * o.speed, dmg: o.dmg, crit: o.crit, pierce: o.pierce || 0, traveled: 0, maxDist: o.maxDist, owner: o.owner, enemy: o.enemy };
+    const p = { img, x: o.x, y: o.y, vx: dirx * o.speed, vy: diry * o.speed, dmg: o.dmg, crit: o.crit, pierce: o.pierce || 0, traveled: 0, maxDist: o.maxDist, owner: o.owner, enemy: o.enemy, element: o.element || null, kind: o.kind || 'arrow' };
     this.projectiles.push(p);
     return p;
   }
@@ -870,7 +883,7 @@ export default class WorldScene extends Phaser.Scene {
           if ((e.sprite.x - p.x) ** 2 + (e.sprite.y - p.y) ** 2 < (e.def.radius + 8) ** 2) {
             const crit: boolean = Math.random() < (p.crit || 0);
             // NOTE: takeDamage already floats the number — no second floater (was double).
-            e.takeDamage(Math.round(p.dmg * (crit ? 1.8 : 1)), p.x, p.y, this.floats, crit);
+            e.takeDamage(Math.round(p.dmg * (crit ? 1.8 : 1)), p.x, p.y, this.floats, crit, p.element || undefined, null);
             hit = true;
             if (p.pierce > 0) { p.pierce--; p.dmg *= 0.85; continue; }
             break;

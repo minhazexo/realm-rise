@@ -271,6 +271,18 @@ export interface SaveMigration {
  */
 export const migrations: SaveMigration[] = [
   {
+    from: '1.0.0',
+    to: '1.1.0',
+    note: 'ARPG pass: player.mana pool for staff weapons',
+    migrate(save: SavePayload): SavePayload {
+      // Old saves predate the mana pool. Default fill = max stamina scale;
+      // repair below guarantees the branch even if this step is skipped.
+      const p = save.player as unknown as { mana?: number };
+      if (p && typeof p.mana !== 'number') p.mana = 60;
+      return save;
+    },
+  },
+  {
     from: '0.9.0',
     to: '1.0.0',
     note: 'Camera zoom, explored-chunks fog memory, inventory slots, run stats',
@@ -321,6 +333,10 @@ export function migrateSave(data: SavePayload): SavePayload {
       for (const k of Object.keys(fresh)) {
         if (data[k] === undefined) data[k] = fresh[k];
       }
+      // Deep repair: player.mana (ARPG staff weapons) postdates 1.0 saves that
+      // may reach here without passing the dedicated migration step.
+      const pl = data.player as unknown as { mana?: number } | undefined;
+      if (pl && typeof pl.mana !== 'number') pl.mana = 60;
       data.settings = normaliseSettings(data.settings);
     } catch { /* repair is best-effort */ }
     if (cmpVersions(origin, SAVE_VERSION) < 0) {

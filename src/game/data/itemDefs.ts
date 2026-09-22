@@ -38,6 +38,16 @@ export interface ItemWeaponStats {
   heavy?: boolean;
   pierce?: number;
   reachBonusVsAnimals?: boolean;
+  /** ARPG element (ElementalSystem). Absent = physical. */
+  element?: string;
+  /** Named special ability resolved by the combat path (see WeaponSpecials). */
+  special?: string;
+  /** Extra critical-damage multiplier added on crit (dagger line). */
+  critDmgBonus?: number;
+  /** Overrides the default 1.5× combo finisher multiplier (dual-blade line). */
+  comboFinisherMult?: number;
+  /** Mana spent per attack (staff line). Absent = stamina economy. */
+  manaCost?: number;
 }
 
 export interface ItemUseEffect {

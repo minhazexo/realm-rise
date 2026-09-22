@@ -267,6 +267,7 @@ export function createStateDefaults(seed: number): GameRootState {
       },
       hp: 100,
       stamina: 100,
+      mana: 60,
       hunger: 82,
       thirst: 78,
       coldExposure: 0,

@@ -2,7 +2,7 @@
 // Central tunables. All balance values live here (spec §79 / §80).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 export const PLAYER_CONFIG = {
   baseMaxHp: 90,
