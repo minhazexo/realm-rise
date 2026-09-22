@@ -51,7 +51,8 @@ export interface RegionHost {
   enemies?: any[];
   floats?: { add(x: number, y: number, text: string, style?: string, scale?: number): void };
   spawnNpc?(key: string, x: number, y: number): unknown;
-  spawnChest?(x: number, y: number, tier: string, campId?: string): void;
+  /** Returns the chest image so whoever placed it can take it back. */
+  spawnChest?(x: number, y: number, tier: string, campId?: string): Phaser.GameObjects.Image | null;
   togglePanel?(name: string): void;
 }
 

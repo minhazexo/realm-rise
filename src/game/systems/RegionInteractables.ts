@@ -14,7 +14,7 @@ import { idleReason } from './CraftingSystem.ts';
 import { regionState, setStoryFlag } from './RegionState.ts';
 import { puzzleStep } from '../data/region.ts';
 import type { RegionScene } from './RegionState.ts';
-import type { Interactable, RegionDef, SubRegion } from '../data/region.ts';
+import type { Interactable, RegionDef } from '../data/region.ts';
 
 /** Place the area's clickables (flag-gated ones wait for their flag). */
 export function placeInteractables(scene: RegionScene, region: RegionDef, areaId: string): void {
@@ -55,16 +55,7 @@ function useInteractable(scene: RegionScene, region: RegionDef, it: Interactable
 
   switch (it.kind) {
     case 'savepoint': {
-      const heal: number = Math.round((S.player.derived?.maxHp || 100) * 0.35);
-      S.player.hp = Math.min(S.player.derived?.maxHp || S.player.hp, S.player.hp + heal);
-      S.player.stamina = S.player.derived?.maxStamina || S.player.stamina;
-      // Tell the UI: the HUD only re-reads on a channel notification, so a heal
-      // that skipped this left the health bar showing the pre-rest value.
-      GameState.notify(CH.PLAYER);
-      saveToSlot('auto', S);
-      Bus.emit('play-sound', 'craft_done');
-      scene.floats?.add?.(it.x, it.y - 30, `+${heal}`, '#8aff9f', 1);
-      GameState.toast({ title: it.label.toUpperCase(), msg: 'You rest. The realm remembers you here.', kind: 'discover', dur: 4200 });
+      useSavepoint(scene, it);
       break;
     }
     case 'lore': {
@@ -120,23 +111,50 @@ function useInteractable(scene: RegionScene, region: RegionDef, it: Interactable
       break;
     }
     case 'hostage': {
-      const area: SubRegion | undefined = region.subregions.find((a: SubRegion) => a.id === it.area);
-      const guards: any[] = (scene.enemies || []).filter((e: any) =>
-        !e.dead && area && Math.hypot(e.sprite.x - it.x, e.sprite.y - it.y) < 460);
-      if (guards.length) {
-        GameState.toast({ title: it.label, msg: 'The guards still watch the cage. Clear the camp first.', kind: 'info', dur: 3600 });
-        break;
-      }
-      if (it.flag) setStoryFlag(it.flag);
-      S.player.gold = (S.player.gold || 0) + 40;
-      GameState.notify(CH.PLAYER);
-      scene.floats?.add?.(it.x, it.y - 34, '+40 gold', '#ffd66b', 1.2);
-      GameState.toast({ title: 'FREED', msg: it.text || '', kind: 'stage', dur: 6000 });
-      img.setAlpha(0.45);
-      Bus.emit('play-sound', 'craft_done');
+      useHostage(scene, it, img);
       break;
     }
     default:
       break;
   }
+}
+
+/**
+ * The rest point (savepoint kind). Exported because a World Event raises the
+ * same shrine: one rest path, whether the shrine was authored or rolled.
+ */
+export function useSavepoint(scene: RegionScene, it: Interactable): void {
+  const S = GameState.s;
+  const heal: number = Math.round((S.player.derived?.maxHp || 100) * 0.35);
+  S.player.hp = Math.min(S.player.derived?.maxHp || S.player.hp, S.player.hp + heal);
+  S.player.stamina = S.player.derived?.maxStamina || S.player.stamina;
+  // Tell the UI: the HUD only re-reads on a channel notification, so a heal
+  // that skipped this left the health bar showing the pre-rest value.
+  GameState.notify(CH.PLAYER);
+  saveToSlot('auto', S);
+  Bus.emit('play-sound', 'craft_done');
+  scene.floats?.add?.(it.x, it.y - 30, `+${heal}`, '#8aff9f', 1);
+  GameState.toast({ title: it.label.toUpperCase(), msg: 'You rest. The realm remembers you here.', kind: 'discover', dur: 4200 });
+}
+
+/**
+ * The hostage (rescue) interaction: a cage that will not open while its guards
+ * are alive. Exported for the same reason — a rolled rescue is the shipped one.
+ * The guard test is the cage's own radius, so it works wherever a cage stands.
+ */
+export function useHostage(scene: RegionScene, it: Interactable, img: Phaser.GameObjects.Image): void {
+  const S = GameState.s;
+  const guards: any[] = (scene.enemies || []).filter((e: any) =>
+    !e.dead && e.sprite && Math.hypot(e.sprite.x - it.x, e.sprite.y - it.y) < 460);
+  if (guards.length) {
+    GameState.toast({ title: it.label, msg: 'The guards still watch the cage. Clear the camp first.', kind: 'info', dur: 3600 });
+    return;
+  }
+  if (it.flag) setStoryFlag(it.flag);
+  S.player.gold = (S.player.gold || 0) + 40;
+  GameState.notify(CH.PLAYER);
+  scene.floats?.add?.(it.x, it.y - 34, '+40 gold', '#ffd66b', 1.2);
+  GameState.toast({ title: 'FREED', msg: it.text || '', kind: 'stage', dur: 6000 });
+  img.setAlpha(0.45);
+  Bus.emit('play-sound', 'craft_done');
 }
