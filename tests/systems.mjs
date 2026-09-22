@@ -14,6 +14,7 @@ import { firstSteps, earlyWinTick, welcomeBackText } from '../src/game/systems/T
 import * as Loot from '../src/game/systems/LootSystem.ts';
 import * as Build from '../src/game/systems/BuildSystem.ts';
 import * as Spawn from '../src/game/systems/SpawnDirector.ts';
+import { ELITE_FOR_BASE } from '../src/game/data/elites.ts';
 import * as Factory from '../src/game/systems/EntityFactory.ts';
 import * as Econ from '../src/game/systems/EconomySystem.ts';
 import { healToFull } from '../src/game/systems/ProgressionXP.ts';
@@ -244,7 +245,10 @@ ok(typeof fnode.uid === 'string' && fnode.uid.startsWith('n'), 'factory node uid
 ok(Factory.createResource(stubFactory, 'nope_not_real', 0, 0, 'fk2', null) === null, 'factory rejects unknown node types');
 // spawn delegates route through the factory (shared injection)
 const viaSpawn = Spawn.spawnEnemy(stubFactory, 'wolf', 9, 9);
-ok(viaSpawn && viaSpawn.key === 'wolf', 'SpawnDirector.spawnEnemy delegates to the factory');
+// spawnEnemy may randomly promote the wolf to its elite variant (~3–5% of
+// spawns), so pin the delegation (the factory built it) plus either key.
+ok(viaSpawn instanceof StubEnemy && (viaSpawn.key === 'wolf' || viaSpawn.key === ELITE_FOR_BASE.wolf),
+   'SpawnDirector.spawnEnemy delegates to the factory');
 const viaNode = Spawn.spawnNode(stubFactory, 'rock_small', 5, 5, 'dk1', null);
 ok(viaNode && stubFactory.nodes.get(viaNode.uid) === viaNode && viaNode.uid !== fnode.uid, 'SpawnDirector.spawnNode delegates with unique uids');
 // createItem: headless (no scene), stack vs instanced gear, unknown → null
