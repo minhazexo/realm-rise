@@ -50,6 +50,12 @@ export interface QuestDef {
   steps: QuestStep[];
   rewards: QuestRewards;
   flagsOnComplete?: string[];
+  /**
+   * Side quests only: every one of these story flags must already be set before
+   * the quest can be offered (the shard chain gates each link on the one before
+   * it). Checked in QuestSystem.offerSideQuest and WorldScene.isSideAvailable.
+   */
+  requiresFlags?: string[];
   grantWeapon?: string;
   eventOnly?: boolean;
   itemOnly?: boolean;

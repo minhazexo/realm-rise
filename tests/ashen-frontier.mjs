@@ -44,6 +44,7 @@ const {
 const { puzzleStep, stationsOf } = await import('../src/game/data/region.ts');
 const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { SIDE_QUESTS } = await import('../src/game/data/questsSide.ts');
+const { SHARDS } = await import('../src/game/data/storyShards.ts');
 const { getItem } = await import('../src/game/data/items.ts');
 const { allPois, setWorldSeed, isWaterAt } = await import('../src/game/world/worldGen.ts');
 
@@ -119,7 +120,7 @@ for (const enc of ASHEN_ENCOUNTERS) {
 }
 
 // ── 4. Interactables ────────────────────────────────────────────────────
-const KINDS = new Set(['chest', 'savepoint', 'lore', 'crystal', 'hostage', 'shrine', 'station']);
+const KINDS = new Set(['chest', 'savepoint', 'lore', 'crystal', 'hostage', 'shrine', 'station', 'shard', 'ritual']);
 ok(ASHEN_INTERACTABLES.length >= 14, `interactables: ${ASHEN_INTERACTABLES.length} placed`);
 for (const it of ASHEN_INTERACTABLES) {
   ok(areaIds.has(it.area), `${it.id}: area '${it.area}' exists`);
@@ -134,8 +135,11 @@ ok(gated.length >= 2, 'both the seal vault and the boss cache are flag-gated (re
 ok(gated.some((i) => i.requiresFlag === ASHEN_PUZZLE.flag), 'the seal vault opens on the puzzle flag');
 for (const it of gated) {
   ok(typeof it.requiresFlag === 'string' && it.requiresFlag.length > 3, `${it.id}: requires a real flag`);
+  // A gate must be opened by something real: a quest reward, the crystal
+  // puzzle, or a realm shard actually taken out in the world.
   const producedByQuest = Object.values(SIDE_QUESTS).some((q) => (q.rewards?.flagsSet || []).includes(it.requiresFlag));
-  ok(producedByQuest || it.requiresFlag === ASHEN_PUZZLE.flag,
+  const producedByShard = SHARDS.some((s) => s.flag === it.requiresFlag);
+  ok(producedByQuest || producedByShard || it.requiresFlag === ASHEN_PUZZLE.flag,
     `${it.id}: flag '${it.requiresFlag}' is actually produced in-game`);
 }
 ok(new Set(gated.map((i) => i.requiresFlag)).size === gated.length, 'each vault needs its own flag (no duplicate gates)');

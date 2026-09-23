@@ -9,16 +9,12 @@ import CharacterCreation from './components/CharacterCreation.tsx';
 import IntroOverlay from './components/IntroOverlay.tsx';
 import HUD from './components/HUD.tsx';
 import Toasts from './components/Toasts.tsx';
-import Dialogue from './components/Dialogue.ts';
-import QuestTracker from './components/QuestTracker.ts';
-import { FirstSteps } from './components/Overlays.tsx';
-import { ZoomControls } from './components/Overlays.tsx';
-import Minimap from './components/Minimap.ts';
+// Overlays is the one home for the world HUD surfaces; import from it directly
+// rather than through per-surface re-export shims (deleted 2026-09-23).
+import { FirstSteps, ZoomControls, Dialogue, QuestTracker, Minimap, BossBar, AchievementPopup } from './components/Overlays.tsx';
 import Panels from './components/Panels.tsx';
 import TouchControls from './components/TouchControls.tsx';
 import DeathOverlay from './components/DeathOverlay.tsx';
-import BossBar from './components/BossBar.ts';
-import AchievementPopup from './components/AchievementPopup.ts';
 import RulerPanel from './components/RulerPanel.tsx';
 import DebugPanel from './components/DebugPanel.tsx';
 

@@ -8,14 +8,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs && node tests/content.mjs && node tests/uidiscipline.mjs && node tests/save.mjs && node tests/ambient.mjs && node tests/overlays.mjs && node tests/autoattack.mjs && node tests/weapons-elements.mjs && node tests/elites-boss.mjs && node tests/ashen-frontier.mjs && node tests/world-events.mjs",
+    "test": "node tests/smoke.mjs && node tests/systems.mjs && node tests/settings.mjs && node tests/content.mjs && node tests/uidiscipline.mjs && node tests/structure.mjs && node tests/save.mjs && node tests/ambient.mjs && node tests/overlays.mjs && node tests/autoattack.mjs && node tests/weapons-elements.mjs && node tests/elites-boss.mjs && node tests/ashen-frontier.mjs && node tests/world-events.mjs && node tests/shards.mjs",
     "typecheck": "tsc --noEmit",
-    "graphify": "madge --extensions js,jsx --layout dot --image docs/dependency-graph.svg --rankdir LR src/",
-    "graphify:circular": "madge --extensions js,jsx --circular --layout dot --image docs/circular-deps.svg --rankdir LR src/",
-    "graphify:json": "madge --extensions js,jsx --json src/ > docs/dependency-graph.json",
-    "graphify:summary": "madge --extensions js,jsx --summary src/",
-    "graphify:orphans": "madge --extensions js,jsx --orphans src/",
-    "graphify:dot": "madge --extensions js,jsx --dot src/"
+    "graphify": "madge --extensions ts,tsx --layout dot --image docs/dependency-graph.svg --rankdir LR src/",
+    "graphify:circular": "madge --extensions ts,tsx --circular --layout dot --image docs/circular-deps.svg --rankdir LR src/",
+    "graphify:json": "madge --extensions ts,tsx --json src/ > docs/dependency-graph.json",
+    "graphify:summary": "madge --extensions ts,tsx --summary src/",
+    "graphify:orphans": "madge --extensions ts,tsx --orphans src/",
+    "graphify:dot": "madge --extensions ts,tsx --dot src/"
   },
   "dependencies": {
     "phaser": "^4.2.1",
