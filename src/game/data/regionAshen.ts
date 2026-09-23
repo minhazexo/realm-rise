@@ -16,6 +16,11 @@ import type {
   Encounter, Hazard, Interactable, Landmark, PropSpec, Puzzle, RegionDef,
   RegionNpc, RegionPoi, SubRegion,
 } from './region.ts';
+// The Five Realm Shards' geography (brief §14). The spine owns where each
+// fragment lies, who holds it and what it pays, so this region builds its shard
+// objects from that one definition instead of keeping a second coordinate list.
+import { SHARDS, BARRIER } from './storyShards.ts';
+import type { ShardDef } from './storyShards.ts';
 
 // ── Sub-areas ───────────────────────────────────────────────────────────────
 // Laid out around the spawn point (0, 260): a dense ~2 km frontier, not an
@@ -523,12 +528,14 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'village_lore', area: 'village', kind: 'lore', label: 'Half-Burned Notice',
     x: -60, y: 356, tex: 'sign_broken',
     text: 'BY ORDER OF THE WARDEN: all settlers to the watchtower. The road south is lost. Do not go into the trees after dark.',
+    book: 'anchor_ledger',
     flag: 'lore_ashen_notice',
   },
   {
     id: 'road_lore', area: 'road', kind: 'lore', label: 'Spilled Ledger',
     x: 300, y: -60, tex: 'cart_wreck', scale: 0.8,
     text: 'A tally of grain, tools, and twelve names. Eleven are struck through. The last reads: taken alive — north-east.',
+    book: 'spilled_ledger',
     flag: 'lore_road_ledger',
   },
   {
@@ -541,6 +548,7 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'camp_orders', area: 'camp', kind: 'lore', label: "Captain's Orders",
     x: 610, y: 20, tex: 'banner', scale: 0.9, tint: 0x7a3b3b,
     text: 'Hold the road. The Warden pays for prisoners, not corpses. If the pyre lights again, run.',
+    book: 'captains_orders',
     flag: 'lore_camp_orders',
   },
   {
@@ -551,6 +559,7 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'forest_lore', area: 'forest', kind: 'lore', label: 'Carving in the Bark',
     x: 740, y: -250, tex: 'tree_oak', scale: 1.2,
     text: 'Someone cut marks into the oak — one for each night they survived out here. There are forty-one.',
+    book: 'bark_carving',
     flag: 'lore_forest_carving',
   },
   {
@@ -561,6 +570,7 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'tower_lore', area: 'tower', kind: 'lore', label: "Garrison's Log",
     x: -770, y: -470, tex: 'ruin_pillar', scale: 0.9,
     text: 'Last entry, third watch: "It came up the stair while we slept. The Warden ordered the pyre lit. Gods forgive us, we obeyed."',
+    book: 'garrison_log',
     flag: 'lore_tower_log',
   },
   {
@@ -571,6 +581,7 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'bridge_lore', area: 'bridge', kind: 'lore', label: 'Keystone Rubble',
     x: 250, y: -740, tex: 'ruin_arch', scale: 0.9,
     text: 'The keystone is scored by something with too many teeth. The span was not cut — it was bitten through.',
+    book: 'keystone_rubble',
     flag: 'lore_bridge_keystone',
   },
   {
@@ -589,6 +600,7 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'hollow_lore', area: 'hollow', kind: 'lore', label: 'Sealed Inscription',
     x: -260, y: -1060, tex: 'ruin_pillar', scale: 1.0, tint: 0x4a4358,
     text: 'The seal reads: "THREE STEPS, ONE BREATH — outer, inner, crown." The miners ignored it. The miners are still here.',
+    book: 'sealed_inscription',
     flag: 'lore_hollow_seal',
   },
   {
@@ -608,11 +620,49 @@ export const ASHEN_INTERACTABLES: Interactable[] = [
     id: 'arena_lore', area: 'pyre', kind: 'lore', label: 'The Ash-Crowned Stone',
     x: 880, y: -1520, tex: 'ruin_pillar', scale: 1.1, tint: 0x6a5a52,
     text: 'Carved where the pyre was lit: "We burned our dead so the Veil could not wear them. The Warden would not burn."',
+    book: 'ash_crowned_stone',
     flag: 'lore_warden_stone',
   },
   {
     id: 'arena_cache', area: 'pyre', kind: 'chest', label: "Warden's Cache",
     x: 1080, y: -1520, tex: 'royal_chest', tier: 'royal_chest', requiresFlag: 'warden_slain',
+  },
+
+  // ── The Five Realm Shards (brief §14) ──────────────────────────────────────
+  // One object per fragment, built from the spine's own definition so its site,
+  // its guardian and its reward have a single owner in data/storyShards.ts.
+  // `onceOnly` rides the per-save POI marker the region already keeps for
+  // cleared fights and looted caches, so a fragment taken in one session does
+  // not reappear in the next.
+  ...SHARDS.map((s: ShardDef): Interactable => ({
+    // The object carries the fragment's own id — one name for one thing.
+    id: s.id,
+    area: s.area,
+    kind: 'shard',
+    label: s.name,
+    x: s.site.x,
+    y: s.site.y,
+    tex: 'crystal_node',
+    scale: 0.55,
+    shard: s.id,
+    // Published here as well so the region keeps declaring the flags its props
+    // write (the value still comes from the shard's single definition).
+    flag: s.flag,
+    onceOnly: true,
+  })),
+  {
+    id: 'shrine_inscription', area: 'shrine', kind: 'lore', label: 'The Fivefold Anchor',
+    x: 1120, y: -1080, tex: 'ruin_pillar', scale: 0.95, tint: 0x7d7a8c,
+    book: 'shrine_anchor',
+    text: 'Five cuts in the stone, all of them empty. Whatever filled them is somewhere else now.',
+    flag: 'lore_shrine_anchor',
+  },
+  {
+    // The final beat. It appears as soon as the first fragment is in hand, so
+    // the player learns where the road ends before they have walked it.
+    id: 'fivefold_anchor', area: BARRIER.area, kind: 'ritual', label: BARRIER.name,
+    x: BARRIER.site.x, y: BARRIER.site.y, tex: 'temple_shrine', scale: 0.85, tint: 0x8f9bb0,
+    requiresFlag: 'shard_hearth_taken',
   },
 ];
 

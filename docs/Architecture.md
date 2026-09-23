@@ -1,5 +1,9 @@
 # Architecture — How Everything Connects
 
+> This file explains the **data flow** (state → bus → UI, the game loop).
+> For the **file map** — which module owns what, where new code belongs, the layer
+> rules and the size budgets — see [STRUCTURE.md](./STRUCTURE.md).
+
 > Rewritten 2026-09: the previous copy of this file was saved as UTF-16 with
 > null bytes and rendered unreadable in every editor. This version restores
 > the original content from the readable fragments and updates it to match

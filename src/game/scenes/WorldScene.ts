@@ -1,8 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// WorldScene (spec §51–52): procedural world streaming, player, gathering,
-// combat, enemies, POIs, NPCs, settlement building, day/night, economy ticks.
-// NOTE: file is assembled across parts; the class opening brace below stays
-// open until the final part closes it.
+// WorldScene (spec §51–52) — the coordinator.
+//
+// This scene owns the live world: the Phaser display/camera, the entity lists,
+// and the per-frame order in which the systems run. Everything with a policy
+// of its own lives in src/game/systems and is called from here — see
+// docs/STRUCTURE.md for the module map and where new behaviour belongs.
+// The methods below are the scene's own; the ones marked "delegated" are thin
+// delegates kept so entities and React can keep calling scene.<name>().
 // ─────────────────────────────────────────────────────────────────────────────
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
@@ -21,7 +25,7 @@ import { addItem } from '../systems/InventorySystem.ts';
 import { refresh as kingdomRefresh, recruitCitizen } from '../systems/KingdomSystem.ts';
 import { productionTick } from '../systems/KingdomEconomy.ts';
 import { getBuildingDef } from '../data/buildings.ts';
-import { getNpcDef } from '../data/npcs.ts';
+import { getNpcDef, npcLines } from '../data/npcs.ts';
 import { saveToSlot } from '../systems/SaveSystem.ts';
 import { getSetting } from '../systems/SettingsSystem.ts';
 import { getItem } from '../data/items.ts';
@@ -36,12 +40,10 @@ import { placeRegion, updateRegion, regionSnapshot } from '../systems/RegionSyst
 import { tickWorldEvents, worldEventSnapshot } from '../systems/WorldEventRuntime.ts';
 import { regionStations } from '../systems/RegionRegistry.ts';
 
-/** Projectile tint per element (magic bolts). Falls back to arcane blue. */
-const ELEMENT_TINT: Record<string, number> = {
-  fire: 0xff8a4a, ice: 0x9fdcff, lightning: 0xffe86b, poison: 0x9fe86b,
-  shadow: 0xb48aff, holy: 0xfff3c9, arcane: 0x9fb4e8, physical: 0xffffff
-};
 import * as lootSys from '../systems/LootSystem.ts';
+import * as npcSys from '../systems/NpcSystem.ts';
+import * as projSys from '../systems/ProjectileSystem.ts';
+import * as bossSys from '../systems/BossUISystem.ts';
 import * as buildSys from '../systems/BuildSystem.ts';
 import * as minimapSys from '../systems/MinimapSystem.ts';
 import * as inputSys from '../systems/InputSystem.ts';
@@ -176,31 +178,8 @@ export default class WorldScene extends Phaser.Scene {
       } catch { /* */ }
     });
 
-    // Boss UI (boss bar) — Phase D: actually publishes session.activeBoss
-    // so the BossBar overlay (now mounted in App.jsx) has data to render.
-    // HP is refreshed every 30 frames in update() via refreshBossBar().
-    this.bossUI = {
-      _boss: null as any,
-      _phase: 1 as number,
-      show(boss: any): void {
-        this._boss = boss; this._phase = 1;
-        (GameState.session as any).activeBoss = { name: boss.def?.name || boss.key, hp: boss.hp, maxHp: boss.maxHp, phase: 1 };
-        GameState.notify(CH.BOSSBAR);
-        Bus.emit('boss-intro', boss.key);
-      },
-      setPhase(p: number): void {
-        this._phase = p;
-        if ((GameState.session as any).activeBoss) {
-          (GameState.session as any).activeBoss.phase = p;
-          GameState.notify(CH.BOSSBAR);
-        }
-      },
-      hide(): void {
-        this._boss = null;
-        (GameState.session as any).activeBoss = null;
-        GameState.notify(CH.BOSSBAR);
-      }
-    };
+    // Boss bar state (delegated to systems/BossUISystem — see docs/STRUCTURE.md).
+    this.bossUI = bossSys.createBossUI(this);
 
     this.setupInput();
     this.setupProjectiles();
@@ -600,181 +579,17 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  /* ── NPCs & recruitment (spec §21–22) ───────────────────────────────── */
-  spawnWildNpcs(): void {
-    const forged = GameState.s.settlement.citizens.map((c: any) => c.name);
-    for (const poi of (allPois() as any[])) {
-      if (poi.kind === 'camp_friend' || poi.kind === 'rescue') {
-        const npcDef = getNpcDef(poi.npc);
-        if (npcDef && forged.includes(npcDef.name)) continue;
-        this.spawnNpc(poi.npc, poi.x + 8, poi.y + 14);
-      }
-    }
-  }
-
-  spawnNpc(key: string, x: number, y: number): any {
-    return createNpc(this, key, x, y, (npc: any) => this.interactNpc(npc));
-  }
-
-  interactNpc(npc: any): void {
-    const S = GameState.s;
-    if (npc.def.req && !this.npcRequirementsMet(npc.def)) {
-      (GameState as any).toast({ title: npc.def.name, msg: this.reqText(npc.def.req), kind: 'dialogue' });
-      return;
-    }
-        import('../systems/QuestEngine.ts').then((q: any) => q.handleEvent({ type: 'talk', npc: npc.key }));
-    const lines = npc.def.dialogue || npc.def.greetLines || ['…'];
-    (GameState.session as any).dialogue = { npc: npc.key, name: npc.def.name, portrait: npc.def.portrait, lines, actions: this.npcActions(npc) };
-    if (npc.def.questGiver && isSideAvailable(npc.def.questGiver)) {
-      (GameState.session as any).dialogue.actions.push({ label: 'Accept quest', fn: 'offerSideQuest', arg: npc.def.questGiver });
-    }
-    GameState.notify(CH.DIALOGUE);
-  }
-
-  npcRequirementsMet(def: any): boolean {
-    const R = GameState.s;
-    const req = def.req || {};
-    if (req.rep && R.player.reputation < req.rep) return false;
-    if (req.gold && R.player.gold < req.gold) return false;
-    if (req.stage && (R.settlement.stageIndex || 0) < req.stage) return false;
-    if (req.buildingNearby && !R.settlement.buildings.some((b: any) => b.key === req.buildingNearby && b.complete)) return false;
-    if (req.questFlag && !R.story.flags[req.questFlag]) return false;
-    return true;
-  }
-
-  reqText(req: any): string {
-    const needs: string[] = [];
-    if (req.rep) needs.push(`${req.rep} reputation`);
-    if (req.gold) needs.push(`${req.gold} gold`);
-    if (req.stage) needs.push(`${(['Camp','Camp','Village','Town','City','Kingdom','Empire'] as string[])[req.stage as number]} rank`);
-    if (req.buildingNearby) needs.push(`${getBuildingDef(req.buildingNearby)?.label || req.buildingNearby} built`);
-    return 'Requires ' + needs.join(' · ');
-  }
-
-  npcActions(npc: any): any[] {
-    const out: any[] = [];
-    if (npc.def.joinAs || npc.def.cost) {
-      out.push({ label: npc.def.cost ? `Recruit (${npc.def.cost.gold} gold)` : 'Invite to your realm', fn: 'recruitNpc', arg: npc.key });
-    }
-    if (npc.def.merchant) out.push({ label: 'Trade', fn: 'openTrade', arg: npc.key });
-    return out;
-  }
-
-  updateNpcs(dt: number, _px: number, _py: number): void {
-    void _px; void _py;
-    for (const npc of this.npcs) {
-      const s = npc.sprite;
-      // Distant NPCs skip the wander AI entirely (enemies already cull at
-      // 1250/1800 px) — depth/shadow still update so nothing pops when
-      // re-entering range.
-      if (_px != null && _py != null) {
-        const ndx: number = s.x - _px, ndy: number = s.y - _py;
-        if (ndx * ndx + ndy * ndy > 1600 * 1600) {
-          s.setDepth(Math.round(s.y));
-          npc.shadow?.setPosition(s.x, s.y + 3).setDepth(s.depth - 1);
-          continue;
-        }
-      }
-      // Skip AI if NPC is being talked to
-      if ((GameState.session as any).dialogue?.npc === npc.key) {
-        s.setDepth(Math.round(s.y));
-        npc.shadow?.setPosition(s.x, s.y + 3).setDepth(s.depth - 1);
-        continue;
-      }
-
-      npc.aiTimer -= dt;
-
-      switch (npc.aiState) {
-        case 'idle': {
-          // Stand still, countdown to next wander
-          if (npc.aiTimer <= 0) {
-            // Pick a random walkable target within wander radius of home
-            const angle: number = Math.random() * Math.PI * 2;
-            const dist: number = 20 + Math.random() * (npc.wanderRadius - 20);
-            npc.aiTargetX = npc.homeX + Math.cos(angle) * dist;
-            npc.aiTargetY = npc.homeY + Math.sin(angle) * dist;
-            // Determine direction
-            const dx: number = npc.aiTargetX - s.x;
-            const dy: number = npc.aiTargetY - s.y;
-            if (Math.abs(dx) > Math.abs(dy)) {
-              npc.aiDir = dx < 0 ? 'left' : 'right';
-            } else {
-              npc.aiDir = dy < 0 ? 'up' : 'down';
-            }
-            npc.aiState = 'walking';
-            npc.aiWalkFrame = 0;
-            npc.aiWalkAccum = 0;
-          }
-          break;
-        }
-        case 'walking': {
-          // Move toward target
-          const dx: number = npc.aiTargetX - s.x;
-          const dy: number = npc.aiTargetY - s.y;
-          const dist: number = Math.hypot(dx, dy);
-          if (dist < 3 || npc.aiTimer <= 0) {
-            // Arrived or timed out — stop and pause
-            npc.aiState = 'pausing';
-            npc.aiTimer = 2 + Math.random() * 5;  // pause 2–7 seconds
-            npc.aiDir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : (dy < 0 ? 'up' : 'down');
-            s.setFrame(`${npc.aiDir}_1`);
-          } else {
-            // Village wander is 28 px/s; a traveling pedlar says otherwise.
-            const speed = npc.walkSpeed || 28;
-            const step: number = Math.min(speed * dt, dist);
-            s.x += (dx / dist) * step;
-            s.y += (dy / dist) * step;
-            // Walk animation cycle: frames 0→1→2→1 at ~6fps
-            npc.aiWalkAccum += dt;
-            if (npc.aiWalkAccum > 0.16) {
-              npc.aiWalkAccum -= 0.16;
-              npc.aiWalkFrame = (npc.aiWalkFrame + 1) % 4; // 0,1,2,1
-            }
-            const phase: number = npc.aiWalkFrame === 3 ? 1 : npc.aiWalkFrame;
-            s.setFrame(`${npc.aiDir}_${phase}`);
-          }
-          break;
-        }
-        case 'pausing': {
-          // Stand still, then go idle
-          if (npc.aiTimer <= 0) {
-            npc.aiState = 'idle';
-            npc.aiTimer = 1 + Math.random() * 3;  // 1–4 sec before next wander
-            s.setFrame(`${npc.aiDir}_1`);
-          }
-          break;
-        }
-      }
-
-      s.setDepth(Math.round(s.y));
-      npc.shadow?.setPosition(s.x, s.y + 3).setDepth(s.depth - 1);
-    }
-  }
-
-  recruitNpcFrom(key: string): void {
-    const npcDef = getNpcDef(key);
-    if (!npcDef) return;
-    const cost = npcDef.cost || {};
-    if (cost.gold && GameState.s.player.gold < cost.gold) {
-      (GameState as any).toast({ title: npcDef.name, msg: 'Not enough gold.', kind: 'warn' });
-      return;
-    }
-    if (cost.gold) GameState.s.player.gold -= cost.gold;
-    recruitCitizen({ name: npcDef.name, role: npcDef.joinAs || 'worker', skillLv: npcDef.skillRate ? Math.round(npcDef.skillRate) : 1 });
-    addReputation(8);
-    (GameState as any).toast({ title: `${npcDef.name} joins you!`, msg: npcDef.dialogue?.[0] || 'Welcome aboard.', kind: 'quest', dur: 4200 });
-    const npc = this.npcs.find((n) => n.key === key);
-    if (npc) { this.npcs = this.npcs.filter((n) => n !== npc); npc.sprite.destroy(); npc.shadow?.destroy(); }
-    GameState.closeDialogue();
-    GameState.notify(CH.SETTLEMENT, CH.PLAYER);
-    kingdomRefresh();
-  }
-
-  openTradeFor(key: string): void {
-    (GameState.session as any).tradeNpc = { key };
-    (GameState.session as any).uiPanel = 'trade';
-    GameState.notify(CH.SCREEN);
-  }
+  /* ── NPCs & recruitment (spec §21–22) — see systems/NpcSystem.ts ────── */
+  spawnWildNpcs(): void { npcSys.spawnWildNpcs(this); }
+  spawnNpc(key: string, x: number, y: number): any { return npcSys.spawnNpc(this, key, x, y); }
+  interactNpc(npc: any): void { npcSys.interactNpc(this, npc); }
+  offerableQuest(def: any): string | null { return npcSys.offerableQuest(def); }
+  npcRequirementsMet(def: any): boolean { return npcSys.npcRequirementsMet(def); }
+  reqText(req: any): string { return npcSys.reqText(req); }
+  npcActions(npc: any): any[] { return npcSys.npcActions(npc); }
+  updateNpcs(dt: number, px: number, py: number): void { npcSys.updateNpcs(this, dt, px, py); }
+  recruitNpcFrom(key: string): void { npcSys.recruitNpcFrom(this, key); }
+  openTradeFor(key: string): void { npcSys.openTradeFor(key); }
 
   /* ── Buildings: placement, construction, upgrade (spec §24, §72) ────── */
   /* ── Settlement construction (delegated to systems/BuildSystem) ──── */
@@ -846,83 +661,11 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  /* ── Projectiles (spec §18) ─────────────────────────────────────────── */
-  setupProjectiles(): void {
-    this.projectiles = [];
-  }
-
-  spawnProjectile(o: any): any {
-    const tex: string = o.kind === 'fireball' ? 'proj_fireball' : o.kind === 'magic' ? 'fx_light' : 'proj_arrow';
-    const img = this.add.image(o.x, o.y, tex).setDepth(85).setRotation(o.angle);
-    // Elemental identity: tint the bolt and add a colored trail so magic reads
-    // as its element in flight (staff line, elemental bows).
-    if (o.kind === 'magic') {
-      img.setScale(0.34);
-      img.setBlendMode(Phaser.BlendModes.ADD);
-      try { img.setTint(ELEMENT_TINT[o.element as string] ?? 0x9fb4e8); } catch { /* default tint */ }
-    }
-    const dirx: number = Math.cos(o.angle), diry: number = Math.sin(o.angle);
-    const p = { img, x: o.x, y: o.y, vx: dirx * o.speed, vy: diry * o.speed, dmg: o.dmg, crit: o.crit, pierce: o.pierce || 0, traveled: 0, maxDist: o.maxDist, owner: o.owner, enemy: o.enemy, element: o.element || null, kind: o.kind || 'arrow' };
-    this.projectiles.push(p);
-    return p;
-  }
-
-  updateProjectiles(dt: number): void {
-    for (const p of [...this.projectiles]) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.traveled += Math.hypot(p.vx * dt, p.vy * dt);
-      p.img.setPosition(p.x, p.y);
-      // Arrow trail: fading after-images make fast projectiles readable.
-      // Cheap: one small image every 40ms per projectile, auto-destroyed.
-      // Skipped on low quality.
-      try {
-        const q: string = GameState.s?.settings?.graphicsQuality || 'med';
-        p._trailAcc = (p._trailAcc || 0) + dt;
-        if (q !== 'low' && p._trailAcc > 0.04) {
-          p._trailAcc = 0;
-          const ghost = this.add.image(p.x, p.y, p.img.texture.key)
-            .setDepth(p.img.depth - 1)
-            .setRotation(p.img.rotation)
-            .setScale(p.img.scaleX * 0.9)
-            .setAlpha(0.35);
-          this.tweens.add({ targets: ghost, alpha: 0, duration: 160, onComplete: () => { try { ghost.destroy(); } catch { /* gone */ } } });
-        }
-      } catch { /* cosmetic only */ }
-      if (p.traveled > p.maxDist || Math.abs(p.x) > WORLD_CONFIG.worldHalfExtent || Math.abs(p.y) > WORLD_CONFIG.worldHalfExtent) {
-        this.destroyProjectile(p);
-        continue;
-      }
-      // collide
-      if (p.owner === 'player') {
-        let hit = false;
-        for (const e of this.enemies) {
-          if (e.dead) continue;
-          if ((e.sprite.x - p.x) ** 2 + (e.sprite.y - p.y) ** 2 < (e.def.radius + 8) ** 2) {
-            const crit: boolean = Math.random() < (p.crit || 0);
-            // NOTE: takeDamage already floats the number — no second floater (was double).
-            e.takeDamage(Math.round(p.dmg * (crit ? 1.8 : 1)), p.x, p.y, this.floats, crit, p.element || undefined, null);
-            hit = true;
-            if (p.pierce > 0) { p.pierce--; p.dmg *= 0.85; continue; }
-            break;
-          }
-        }
-        if (hit) this.destroyProjectile(p);
-      } else if (p.owner === 'enemy') {
-        const pl = this.player;
-        if (!pl.sprite) return;
-        if ((pl.sprite.x - p.x) ** 2 + (pl.sprite.y - p.y) ** 2 < 13 * 13) {
-          pl.takeDamage(p.dmg, p.x, p.y);
-          this.destroyProjectile(p);
-        }
-      }
-    }
-  }
-
-  destroyProjectile(p: any): void {
-    p.img.destroy();
-    this.projectiles = this.projectiles.filter((q) => q !== p);
-  }
+  /* ── Projectiles (spec §18) — see systems/ProjectileSystem.ts ───────── */
+  setupProjectiles(): void { projSys.setupProjectiles(this); }
+  spawnProjectile(o: any): any { return projSys.spawnProjectile(this, o); }
+  updateProjectiles(dt: number): void { projSys.updateProjectiles(this, dt); }
+  destroyProjectile(p: any): void { projSys.destroyProjectile(this, p); }
 
   /* ── Loot drops (delegated to systems/LootSystem — scene stays thin) ─── */
   setupLoot(): void {
@@ -1039,12 +782,9 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   /* ── Share helpers to other systems ────────────────────────────────── */
-  onEnemyDeath(e: any): void {
-    if (e.boss && this.bossUI?._boss === e) this.bossUI.hide();
-    if (!e.boss) return;
-    // chain quest progress for boss kills
-        import('../systems/QuestEngine.ts').then((q: any) => q.handleEvent({ type: 'kill', boss: e.key }));
-  }
+  /** A boss died — the bar, its last words and the kill event are
+   *  systems/BossUISystem's job (delegate). */
+  onEnemyDeath(e: any): void { bossSys.onBossDeath(this, e); }
 
   /**
    * Phase D: raider siege AI. Raiders (`raider=true`, spawned by announced
@@ -1115,21 +855,7 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Phase D: keep the boss bar HP live; hide when the fight is abandoned. */
-  refreshBossBar(px: number, py: number): void {
-    const b = this.bossUI?._boss;
-    if (!b || !(GameState.session as any).activeBoss) return;
-    if (b.dead || !b.sprite) { this.bossUI.hide(); return; }
-    const d2: number = (b.sprite.x - px) ** 2 + (b.sprite.y - py) ** 2;
-    const leash: number = (b.radius || 520) + 300;
-    if (d2 > leash * leash) { this.bossUI.hide(); return; }
-    const ab = (GameState.session as any).activeBoss;
-    const hp: number = Math.max(0, Math.ceil(b.hp));
-    if (ab.hp !== hp) {
-      ab.hp = hp;
-      GameState.notify(CH.BOSSBAR);
-    }
-  }
+  refreshBossBar(px: number, py: number): void { bossSys.refreshBossBar(this, px, py); }
 
   refreshSurvivalHud(): void {
     GameState.notify('PLAYER');
@@ -1141,23 +867,12 @@ export default class WorldScene extends Phaser.Scene {
 function itemName_of(id: string): string {
   return getItem(id)?.name || id;
 }
-function getItem_equip(id: string): any {
-  return getItem(id);
-}
-function isSideAvailable(qid: string): boolean {
-  const S = GameState.s;
-  if (!S) return false;
-  return !S.quests.sideActive.includes(qid) && !S.quests.sideCompleted.includes(qid);
-}
-function isSideDone(qid: string): boolean {
-  return GameState.s?.quests?.sideCompleted?.includes(qid) || false;
-}
+/** Share of the world the player holds: owned camps plus a founded realm. */
 function kingdomPct(): number {
   const S = GameState.s;
   const owned: number = S.world.ownedCamps.length + (S.settlement.founded ? 1 : 0);
   return Math.round((owned / 18) * 100);
 }
-
 /**
  * World-space floating combat/resource text pool.
  *

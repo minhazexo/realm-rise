@@ -115,7 +115,7 @@ export interface Encounter {
 export interface Interactable {
   id: string;
   area: string;
-  kind: 'chest' | 'savepoint' | 'lore' | 'crystal' | 'hostage' | 'station';
+  kind: 'chest' | 'savepoint' | 'lore' | 'crystal' | 'hostage' | 'station' | 'shard' | 'ritual';
   label: string;
   x: number;
   y: number;
@@ -126,6 +126,22 @@ export interface Interactable {
   tier?: string;
   /** Lore body for kind 'lore' / 'hostage'. */
   text?: string;
+  /**
+   * Readable page for kind 'lore': a key into data/voices.ts BOOKS, opened in
+   * the shipped dialogue modal as a book/inscription. `text` stays the one-line
+   * summary for objects that have no book.
+   */
+  book?: string;
+  /**
+   * kind 'shard': which fragment of data/storyShards.ts lies here (its item,
+   * flag, guardian and reward all come from that one definition).
+   */
+  shard?: string;
+  /**
+   * Take once per save — reuses the world.poiStates marker the region already
+   * keeps for cleared fights and looted caches (see RegionState.regionFlag).
+   */
+  onceOnly?: boolean;
   /** Flags written when used. */
   flag?: string;
   /** Crystal id for the puzzle sequence. */

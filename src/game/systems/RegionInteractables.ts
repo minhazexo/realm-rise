@@ -1,18 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// RegionInteractables — the region's clickable world objects and what each one
-// does: chests (the shipped chest path), savepoints, lore, the crystal
-// sequence, rescues, and the region's own crafting station.
+// RegionInteractables — the region's clickable world objects: placement, the
+// hover highlight, and the click dispatch to whatever owns each kind.
 //
-// Owns: which interactables are placed (`interactPlaced`) and the crystal
-// puzzle's progress. Pointer-based, matching the chest/NPC convention.
+// Kinds and owners: chest (the shipped chest path), savepoint, lore and its
+// readable books, the crystal sequence, rescues, the region's crafting station
+// — and shard / ritual, which are delegated to systems/RegionStory. The RULES
+// of the spine live in ShardSystem and its prose in data/voices.ts; this file
+// owns only which interactables are placed and the crystal puzzle's progress.
 // ─────────────────────────────────────────────────────────────────────────────
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { Bus, CH } from '../core/EventBus.ts';
 import { saveToSlot } from './SaveSystem.ts';
 import { idleReason } from './CraftingSystem.ts';
-import { regionState, setStoryFlag } from './RegionState.ts';
+import { regionState, setStoryFlag, regionFlag, setRegionFlag } from './RegionState.ts';
+import { readLines } from './VoiceSystem.ts';
+import { bookText } from '../data/voices.ts';
 import { puzzleStep } from '../data/region.ts';
+import { takeShard, plantAnchor } from './RegionStory.ts';
 import type { RegionScene } from './RegionState.ts';
 import type { Interactable, RegionDef } from '../data/region.ts';
 
@@ -22,6 +27,9 @@ export function placeInteractables(scene: RegionScene, region: RegionDef, areaId
   for (const it of region.interactables) {
     if (it.area !== areaId || st.interactPlaced.has(it.id)) continue;
     if (it.requiresFlag && !GameState.s.story.flags[it.requiresFlag]) continue;
+    // Taken once per save: the same POI marker the region keeps for cleared
+    // fights and looted caches, so a fragment does not reappear after CONTINUE.
+    if (it.onceOnly && regionFlag(it.id)) continue;
     st.interactPlaced.add(it.id);
     if (it.kind === 'chest') {
       // Reuse the shipped chest path (pools, toast, sound, persistence).
@@ -60,8 +68,21 @@ function useInteractable(scene: RegionScene, region: RegionDef, it: Interactable
     }
     case 'lore': {
       if (it.flag) setStoryFlag(it.flag);
-      GameState.toast({ title: it.label, msg: it.text || '', kind: 'dialogue', dur: 7600 });
+      // A lore prop that carries a book is READ, not summarised: the pages open
+      // in the dialogue modal the rest of the game already uses (brief §14 —
+      // inscriptions and books carry the mystery, not one exposition dump).
+      const book = it.book ? bookText(it.book) : null;
+      if (book) readLines(book.title, book.lines);
+      else GameState.toast({ title: it.label, msg: it.text || '', kind: 'dialogue', dur: 7600 });
       Bus.emit('play-sound', 'ui_click');
+      break;
+    }
+    case 'shard': {
+      takeShard(scene, it, img);
+      break;
+    }
+    case 'ritual': {
+      plantAnchor(scene, it);
       break;
     }
     case 'station': {

@@ -73,5 +73,61 @@ export const SIDE_QUESTS: Record<string, QuestDef> = {
     id: 'sq_treasure_cache', title: 'X Marks the Spot', itemOnly: true,
     steps: [ { type: 'useItem', itemId: 'treasure_map', text: 'Use a Treasure Map to reveal a cache' } ],
     rewards: {}
+  },
+
+  // ── THE FIVE REALM SHARDS (brief §14) ──────────────────────────────────────
+  // Mara's account of what the barrier was, walked as five links. Each link is
+  // offered only after the one before it (requiresFlags), and each asks for a
+  // fragment that is a real object in a real place, held by a real enemy —
+  // there is no step here that can be completed without going there.
+  // The shard's own coordinates, guardian and gate live in data/storyShards.ts;
+  // what the player reads on recovery lives in data/voices.ts.
+  sq_shard_hearth: {
+    id: 'sq_shard_hearth', title: 'First Fragment: the Hearth', giver: 'mara',
+    intro: 'Mara starts with the camp, because the camp is closest and she wants you to understand what you are collecting. "The Legion took a fragment off the Ragged Hollow and set it in their standard like a trophy. Their Executioner sleeps under it. Take it back before someone sells it."',
+    steps: [ { type: 'flag', flag: 'shard_hearth_taken', text: 'Take the Hearth fragment from the Ragged Hollow standard — the Executioner holds it' } ],
+    rewards: { xp: 240, gold: 90, rep: 6, items: { moonstone: 1 } },
+    outro: 'One. Mara turns the fragment over twice and does not give it back.'
+  },
+  sq_shard_green: {
+    id: 'sq_shard_green', title: 'Second Fragment: the Green', giver: 'mara',
+    requiresFlags: ['shard_hearth_taken'],
+    intro: '"The forest was the wall before there were walls. The trees have held a fragment so long they grew through it, and now the Veil is in the wood trying to take it back."',
+    steps: [ { type: 'flag', flag: 'shard_green_taken', text: 'Cut the Green fragment free of the Whispering Wood — the dire wolves will not let it go' } ],
+    rewards: { xp: 260, gold: 100, rep: 6, items: { healing_salve: 2 } },
+    outro: 'Two. The wood sounds different on the way out — like it is listening for the third.'
+  },
+  sq_shard_watch: {
+    id: 'sq_shard_watch', title: 'Third Fragment: the Watch', giver: 'mara',
+    requiresFlags: ['shard_green_taken'],
+    intro: '"The garrison at the watchtower carried theirs out of the strongroom and died holding the wall with it. Their knight is still standing. I do not think he knows he stopped being alive."',
+    steps: [ { type: 'flag', flag: 'shard_watch_taken', text: 'Take the Watch fragment from the Old Watchtower — lay the garrison’s knight to rest first' } ],
+    rewards: { xp: 280, gold: 120, rep: 8, items: { iron_ingot: 4 } },
+    outro: 'Three. The tower is quiet for the first time in a hundred years.'
+  },
+  sq_shard_hollow: {
+    id: 'sq_shard_hollow', title: 'Fourth Fragment: the Hollow', giver: 'mara',
+    requiresFlags: ['shard_watch_taken'],
+    intro: '"The hollow is the one that scares me. That anchor was not torn open — someone unsealed it from this side, kindly. Whatever came through is still down there with the fragment."',
+    steps: [ { type: 'flag', flag: 'shard_hollow_taken', text: 'Take the Hollow fragment out of the corruption — destroy the thing the Veil left guarding it' } ],
+    rewards: { xp: 320, gold: 150, rep: 10, items: { void_ember: 2 } },
+    outro: 'Four. The corruption thins behind you like water closing, and then it does not move at all.'
+  },
+  sq_shard_ash: {
+    id: 'sq_shard_ash', title: 'Fifth Fragment: the Ash', giver: 'mara',
+    requiresFlags: ['shard_hollow_taken'],
+    intro: '"The last one is at the pyre, under the Warden of Ash. It was posted there to keep that fragment before the frontier had a name. It has not been relieved. Go and relieve it."',
+    steps: [ { type: 'flag', flag: 'shard_ash_taken', text: 'Break the Warden of Ash and take the fifth fragment from the pyre' } ],
+    rewards: { xp: 420, gold: 220, rep: 14, items: { ash_ember: 3 } },
+    outro: 'Five. The fragment is cold, and the whole frontier is leaning in to watch what you do with it.'
+  },
+  sq_shard_barrier: {
+    id: 'sq_shard_barrier', title: 'The Fivefold Anchor', giver: 'mara', chapter: 8,
+    requiresFlags: ['shard_hearth_taken', 'shard_green_taken', 'shard_watch_taken', 'shard_hollow_taken', 'shard_ash_taken'],
+    intro: 'Mara does not have a speech for this one. "The anchor is at the Forsaken Shrine. Five cuts in the stone, five fragments. Put them back and the Veil has nowhere to lean." She pauses. "It will want them back. It has been waiting for someone to carry them all to one place."',
+    steps: [ { type: 'flag', flag: 'barrier_restored', text: 'Carry the five fragments to the Fivefold Anchor at the Forsaken Shrine and set them back in the stone' } ],
+    rewards: { xp: 900, gold: 400, rep: 25, flagsSet: ['aetheria_remembered'] },
+    outro: 'The anchor holds. What that costs, the shrine does not say out loud.',
+    ending: true
   }
 };

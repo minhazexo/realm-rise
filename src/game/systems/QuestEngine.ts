@@ -115,6 +115,21 @@ function completeQuestOnce(def: QuestDef): void {
     import('./AchievementSystem.ts').then((m) => m.evaluateAll()).catch(() => {});
 }
 
+/**
+ * Re-run completion for every active quest. Used when a quest is accepted into a
+ * world that already satisfies it: a player who took a fragment before Mara
+ * offered the link would otherwise carry an unfinishable journal entry, because
+ * the engine only advances on NEW events (see QuestSystem.offerSideQuest).
+ */
+export function recheckActive(): void {
+  const main: QuestDef | null = currentMainQuest();
+  if (main) checkCompletion(main);
+  for (const sid of [...st().quests.sideActive]) {
+    const def: QuestDef | undefined = SIDE_QUESTS[sid];
+    if (def) checkCompletion(def);
+  }
+}
+
 function checkCompletion(def: QuestDef): boolean {
   if (!def?.steps || !isQuestActive(def.id)) return false;
   for (let i = 0; i < def.steps.length; i++) {

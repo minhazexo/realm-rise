@@ -41,5 +41,16 @@ def('stamina_tonic', { cat: 'consumable', use: { staminaFull: true, sprintBuff: 
 def('whetstone', { cat: 'consumable', use: { repairEquipped: 0.5 }, value: 18, icon: { shape: 'stoneblade', c1: '#888fa0' }, desc: 'Restores half durability of your weapon.' });
 def('repair_kit', { cat: 'consumable', use: { repairAll: 0.45 }, rarity: 'uncommon', value: 40, icon: { shape: 'kit', c1: '#a38049' }, desc: 'Mends every worn piece you carry.' });
 
+// ── The Five Realm Shards (brief §14) — the barrier's fragments ──────────────
+// Key items: one each, carried as proof of what you have recovered, and
+// surrendered at the anchor when the five are planted (see data/storyShards.ts).
+// Taken from the world (RegionInteractables 'shard'), never bought or sold for
+// much — a fragment of the wall is not merchandise.
+def('shard_of_the_hearth', { name: 'Hearth Shard', cat: 'special', rarity: 'epic', stack: 1, value: 60, icon: { shape: 'shard', c1: '#e8a13a' }, desc: 'A fragment of the old barrier, warm as a banked fire. It hums the shrine\u2019s note.' });
+def('shard_of_the_green', { name: 'Green Shard', cat: 'special', rarity: 'epic', stack: 1, value: 60, icon: { shape: 'shard', c1: '#6fbf73' }, desc: 'Roots grew through it and would not let go. A fragment of the wall the wood became.' });
+def('shard_of_the_watch', { name: 'Watch Shard', cat: 'special', rarity: 'epic', stack: 1, value: 60, icon: { shape: 'shard', c1: '#9db4cf' }, desc: 'Carried out of a strongroom by men who never got to use it. Still faintly warm from the gauntlet.' });
+def('shard_of_the_hollow', { name: 'Hollow Shard', cat: 'special', rarity: 'legendary', stack: 1, value: 90, icon: { shape: 'shard', c1: '#9d4dff' }, desc: 'Cold that goes through your gloves into the bone. Unsealed, not torn \u2014 someone opened this one.' });
+def('shard_of_ash', { name: 'Ash Shard', cat: 'special', rarity: 'legendary', stack: 1, value: 120, icon: { shape: 'shard', c1: '#ff7a2a' }, desc: 'The fifth anchor \u2014 the one that broke, and the hole the Veil walked through.' });
+
 def('arrows', { name: 'Arrows', stack: 400, value: 1, icon: { shape: 'arrow', c1: '#caa96b' }, desc: 'Ammunition for bows and crossbows.' });
 def('torch', { cat: 'tool', tool: 'light', durability: 240, stack: 20, value: 5, icon: { shape: 'torch', c1: '#e8983f' }, desc: 'Lights the dark — and nights here are dark.' });

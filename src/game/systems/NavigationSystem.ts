@@ -1,4 +1,10 @@
-// Session-only navigation: no save migration or Phaser dependency.
+// ─────────────────────────────────────────────────────────────────────────────
+// NavigationSystem — the world map's navigation state: the compass sector a
+// target lies in, distance to it, and whether the player has arrived.
+//
+// Session-only (no save migration) and Phaser-free, so the geometry is
+// unit-testable in node.
+// ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
 import { CH } from '../core/EventBus.ts';
 import { WORLD_CONFIG } from '../core/Constants.ts';

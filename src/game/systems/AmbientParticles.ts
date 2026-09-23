@@ -1,4 +1,3 @@
-
 // ─────────────────────────────────────────────────────────────────────────────
 // AmbientParticles (spec §63 — "fireflies, falling leaves, environmental
 // animation"):
