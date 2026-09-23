@@ -12,7 +12,7 @@
 import GameState from '../core/GameState.ts';
 import { updateNavigation } from './NavigationSystem.ts';
 import { WORLD_CONFIG } from '../core/Constants.ts';
-import { allPois } from '../world/worldGen.ts';
+import { allPois } from './PoiRegistry.ts';
 import { drawMapTerrain, poiStyle, nodeGlyph } from '../world/mapRender.ts';
 
 const LOGICAL_W = 240;

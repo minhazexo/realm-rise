@@ -46,7 +46,8 @@ const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { SIDE_QUESTS } = await import('../src/game/data/questsSide.ts');
 const { SHARDS } = await import('../src/game/data/storyShards.ts');
 const { getItem } = await import('../src/game/data/items.ts');
-const { allPois, setWorldSeed, isWaterAt } = await import('../src/game/world/worldGen.ts');
+const { setWorldSeed, isWaterAt } = await import('../src/game/world/worldGen.ts');
+const { allPois } = await import('../src/game/systems/PoiRegistry.ts');
 
 // The player's spawn — the one place the region MUST be safe and quiet.
 const SPAWN = { x: 0, y: 260 };

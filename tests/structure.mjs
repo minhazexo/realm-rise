@@ -62,6 +62,32 @@ const dataImportingSystems = walk(join(src, 'game', 'data'))
 if (dataImportingSystems.length) fail(`data/ imports systems/ (wrong direction): ${dataImportingSystems.map(rel).join(', ')}`);
 else ok('data/ imports nothing from systems/');
 
+// world/ is the procedural layer and sits BELOW systems/: the generator must not
+// know about authored content. The one merge that needs both halves lives in a
+// system (systems/PoiRegistry merges proceduralPois() with the regions).
+const worldImportingSystems = walk(join(src, 'game', 'world'))
+  .filter((f) => /from '\.\.\/systems\//.test(read(f)));
+if (worldImportingSystems.length) fail(`world/ imports systems/ (generator must stay below them): ${worldImportingSystems.map(rel).join(', ')}`);
+else ok('world/ (procedural layer) imports nothing from systems/');
+
+/* ── 2b. Entities own themselves, not the game ──────────────────────────── */
+// An entity may read state and act, but a reward it produces goes through the
+// system that owns that state (KillReward, ProgressionXP, …) — never a direct
+// `GameState.s.<branch> =` write here.
+const PERSISTENT = ['player', 'inventory', 'inventorySlots', 'settlement', 'world', 'quests',
+  'story', 'factions', 'achievements', 'stats', 'settings', 'meta', 'kingdom'];
+let entityWrites = 0;
+for (const f of walk(join(src, 'game', 'entities'))) {
+  read(f).split('\n').forEach((line, i) => {
+    const code = line.split('//')[0];
+    for (const branch of PERSISTENT) {
+      const re = new RegExp(`GameState\\.s\\.${branch}\\b[^\\n]*?(?<![=!<>])=(?![=>])`);
+      if (re.test(code)) { entityWrites++; fail(`${rel(f)}:${i + 1} writes persistent state: ${code.trim().slice(0, 90)}`); }
+    }
+  });
+}
+if (!entityWrites) ok('no entity writes persistent state (rewards go through systems)');
+
 /* ── 3. Declared Phaser-free modules really are ─────────────────────────── */
 // These run under node in the test suite: a Phaser import here breaks that.
 const PURE = [
@@ -78,7 +104,7 @@ const polluted = PURE.filter((name) =>
 if (polluted.length) fail(`declared Phaser-free but reference Phaser: ${polluted.join(', ')}`);
 else ok(`${PURE.length} pure modules stay Phaser-free (node-testable)`);
 
-/* ── 4. Size budgets ────────────────────────────────────────────────────── */
+/* ── 4. Size budgets ───────────────────────────────────────────────────── */
 const BUDGETS = [
   ['src/game/scenes', 1000],
   ['src/game/data', 800],

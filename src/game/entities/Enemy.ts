@@ -10,9 +10,7 @@ import { shakeAllowed } from '../systems/SettingsSystem.ts';
 import { applyBreathing } from '../systems/BreathingFX.ts';
 import { DIFFICULTY } from '../core/Constants.ts';
 import { getEnemyDef } from '../data/enemies.ts';
-import { awardXP, profXP } from '../systems/ProgressionSystem.ts';
-import { BIOMES } from '../world/biomeTable.ts';
-import { biomeAt } from '../world/worldGen.ts';
+import { grantKillReward } from '../systems/KillReward.ts';
 import * as ElementalSystem from '../systems/ElementalSystem.ts';
 
 const STATE = Object.freeze({ IDLE: 0, PATROL: 1, DETECT: 2, CHASE: 3, ATTACK: 4, RETREAT: 5, SEARCH: 6, DEAD: 7 });
@@ -553,50 +551,11 @@ export default class Enemy {
     if (this.elite) (this.scene as any).spawnBurst?.(this.sprite.x, this.sprite.y, 'fx_ring');
     this.scene.tweens.add({ targets: this.sprite, alpha: 0, y: this.sprite.y + 8, duration: 260, onComplete: () => this.sprite.destroy() });
 
-    for (const item of this.rollLoot()) (this.scene as any).dropLoot(this.sprite.x, this.sprite.y, item.id, item.qty);
-    const goldMult: number = (DIFFICULTY as any)[GameState.s.settings.difficulty]?.loot || 1;
-    if (this.def.goldDrop) (this.scene as any).dropLootGold(this.sprite.x, this.sprite.y, Math.round(this.def.goldDrop * goldMult));
-
-    // Kill XP scales with the biome's danger multiplier (swamp 1.25 …
-    // volcanic 1.6), making dangerous biomes worth the trip.
-    let xpGain: number = this.def.xp;
-    try {
-      const bId: string = biomeAt(this.sprite.x, this.sprite.y);
-      const dm: number = BIOMES[bId]?.dangerMult || 1;
-      xpGain = Math.round(xpGain * dm);
-    } catch { /* flat XP fallback */ }
-    awardXP(xpGain, 'kill');
-    profXP('combat', 6);
-    // Kill-reward beat: anchor the XP gain at the corpse so kills read as
-    // wins; boss deaths get a heavier burst.
-    try {
-      import('../systems/CelebrationFX.ts').then((c) =>
-        c.killRewardBeat(this.scene as any, this.sprite.x, this.sprite.y, xpGain, this.boss));
-    } catch { /* cosmetic */ }
-    // ── Combat reward: stamina restore on kill ──────────────────────────
-    // Rewards aggressive play and creates exciting kill chains.
-    const killStamina: number = this.boss ? 25 : this.elite ? 14 : 6;
-    GameState.s.player.stamina = Math.min(
-      GameState.s.player.derived?.maxStamina || 100,
-      GameState.s.player.stamina + killStamina
-    );
-    Bus.emit('enemy-killed', { defKey: this.key, isBoss: this.boss, x: this.sprite.x, y: this.sprite.y });
-    Bus.emit('play-sound', 'hit_flesh');
-    if (this.boss) Bus.emit('boss-defeated', this.key);
-    (this.scene as any).onEnemyDeath?.(this);
-  }
-
-  rollLoot(): { id: string; qty: number }[] {
-    const diff = (DIFFICULTY as any)[GameState.s.settings.difficulty] || (DIFFICULTY as any).normal;
-    const hunt: number = GameState.s.player.derived?.huntLoot || 1;
-    const out: { id: string; qty: number }[] = [];
-    for (const l of this.def.loot || []) {
-      const isHunt: boolean = (l.id as string).includes('meat') || (l.id as string).includes('hide') || (l.id as string).includes('pelt');
-      if (Math.random() < (l.chance as number) * (isHunt ? hunt : 1) * (diff.loot as number)) {
-        out.push({ id: l.id, qty: Math.max(l.min, Math.round(l.min + Math.random() * (l.max - l.min))) });
-      }
-    }
-    return out;
+    // The kill is the entity's; what it PAYS is systems/KillReward's (loot,
+    // gold, biome-scaled XP, the beat, the stamina refund, the kill events and
+    // the scene's death hook) — so no entity writes persistent state, and the
+    // payout policy can be read without reading an entity.
+    grantKillReward(this.scene as any, this);
   }
 
   isDay(): boolean {

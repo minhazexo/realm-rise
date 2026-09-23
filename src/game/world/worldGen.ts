@@ -16,10 +16,15 @@
 // Rivers carve lakes below RIVER_LEVEL; POIs (ruins, camps, shrines) are
 // placed deterministically via seeded RNG so only per-node depletion state
 // needs saving — never raw layouts.
+//
+// Layer: this is the PROCEDURAL half of the world and it sits below systems/,
+// so it knows nothing about authored content. `proceduralPois()` returns this
+// generator's own POIs; the game's one merged list (procedural + every authored
+// region) is systems/PoiRegistry.allPois, which is allowed to know about
+// regions. Do not import a system from here.
 // ─────────────────────────────────────────────────────────────────────────────
 import { fbm, valueNoise, mulberry32 } from '../../utils/math.ts';
 import { BIOMES } from './biomeTable.ts';
-import { regionPois } from '../systems/RegionRegistry.ts';
 
 // ── World seed ──────────────────────────────────────────────────────────────
 
@@ -30,15 +35,16 @@ let WORLD_SEED: number = 1;
  * Set the world seed and invalidate the POI cache.
  */
 export function setWorldSeed(seed: number): void {
-  if (seed !== WORLD_SEED) {
-    WORLD_SEED = seed >>> 0 || 1;
-    poiCache = null;
-    poiCacheSeed = null;
-  }
+  if (seed !== WORLD_SEED) WORLD_SEED = seed >>> 0 || 1;
 }
 
 /** Current world seed. */
 const S = (): number => WORLD_SEED;
+
+/** Current world seed, for the layers above that cache per-seed work. */
+export function worldSeed(): number {
+  return WORLD_SEED;
+}
 
 // ── Noise field parameters ──────────────────────────────────────────────────
 // Scale values control feature size — smaller = larger features.
@@ -215,9 +221,6 @@ export interface PointOfInterest {
   chestTier?: string;
 }
 
-let poiCache: PointOfInterest[] | null = null;
-let poiCacheSeed: number | null = null;
-
 // Named POI constants for clarity in placement logic.
 /** Minimum radius from origin for ring-of-ruins placement. */
 const RUIN_MIN_DIST = 2600;
@@ -239,17 +242,19 @@ const SHRINE_SPREAD = 7000;
 const SHRINE_COUNT = 8;
 
 /**
- * Generate all points of interest deterministically from the world seed.
- *
- * Returns a cached array (invalidated on seed change) containing:
+ * This generator's own points of interest, deterministic from the world seed:
  *   - Named story anchors (fixed positions for pacing)
  *   - Ring of ruins (6, evenly spaced with jitter)
  *   - Bandit camps (17 scattered + 1 king's camp)
  *   - Shrines (8, scattered)
+ *
+ * The game's merged list (this plus every authored region's POIs) is
+ * systems/PoiRegistry.allPois(), which caches it per seed.
+ *
+ * @returns A fresh array each call (callers that need it per frame use the
+ *          registry above, which caches).
  */
-export function allPois(): PointOfInterest[] {
-  if (poiCache && poiCacheSeed === S()) return poiCache;
-
+export function proceduralPois(): PointOfInterest[] {
   const rng = mulberry32(S() ^ 0xa11ce);
   const spots: PointOfInterest[] = [];
 
@@ -322,18 +327,6 @@ export function allPois(): PointOfInterest[] {
     });
   }
 
-  // ── Authored region POIs (THE ASHEN FRONTIER, map brief §28) ──────────
-  // Data-driven: the region files own names/coords/stories; worldGen only
-  // registers them so discovery, minimap fog, markers and quests all work.
-  for (const rp of regionPois()) {
-    push({
-      id: rp.id, x: rp.x, y: rp.y, kind: rp.kind, label: rp.label,
-      tag: rp.tag, danger: rp.danger, chestTier: rp.chestTier, npc: rp.npc, boss: rp.boss,
-    });
-  }
-
-  poiCache = spots;
-  poiCacheSeed = S();
   return spots;
 }
 
@@ -360,27 +353,3 @@ export function treasureCacheSpot(nearX: number, nearY: number): { x: number; y:
   };
 }
 
-// ── Exploration guidance ────────────────────────────────────────────────────
-
-/**
- * Find the nearest undiscovered POI to a given position.
- * Used for curiosity guidance (spec §36).
- *
- * @param x  Player world X.
- * @param y  Player world Y.
- * @param excludeIds  POI IDs to skip (already tracked, etc.).
- * @returns Nearest undiscovered POI, or null if all discovered.
- */
-export function nearestUnknownPoi(x: number, y: number, excludeIds: string[] = []): PointOfInterest | null {
-  let best: PointOfInterest | null = null;
-  let bestD = Infinity;
-  for (const p of allPois()) {
-    if (p.discovered || excludeIds.includes(p.id)) continue;
-    const d = (p.x - x) ** 2 + (p.y - y) ** 2;
-    if (d < bestD) {
-      bestD = d;
-      best = p;
-    }
-  }
-  return best;
-}

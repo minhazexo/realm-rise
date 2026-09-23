@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import GameState from '../core/GameState.ts';
 import { CH } from '../core/EventBus.ts';
-import { allPois } from '../world/worldGen.ts';
+import { allPois } from './PoiRegistry.ts';
 import { getNpcDef, npcLines } from '../data/npcs.ts';
 import { getBuildingDef } from '../data/buildings.ts';
 import { createNpc, type NpcRecord } from './EntityFactory.ts';
