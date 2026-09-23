@@ -104,6 +104,18 @@ export function addGold(n: number): void {
   GameState.notify(CH.PLAYER, CH.RESOURCES);
 }
 
+/**
+ * Restore up to `n` stamina, clamped to the player's max. The one way stamina
+ * is given back outside a full heal (kill refunds, rest points), so no
+ * gameplay module has to know how the pool is derived.
+ */
+export function restoreStamina(n: number): void {
+  const S = st();
+  if (!S || n <= 0) return;
+  S.player.stamina = Math.min(S.player.derived?.maxStamina ?? S.player.stamina, S.player.stamina + n);
+  GameState.notify(CH.PLAYER);
+}
+
 /** Restore the player to full HP/stamina (debug + rare scripted mercy). */
 export function healToFull(): void {
   const S = st();

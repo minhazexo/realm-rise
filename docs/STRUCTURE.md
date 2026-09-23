@@ -17,8 +17,26 @@ For the runtime picture — how state reaches the bus, React and the game loop �
 | **Systems** | `src/game/systems/**` | ALL behaviour: one file, one job, one owner of its state. | `core`, `data`, `systems` |
 | **Pure core & data** | `src/game/core/**`, `src/game/data/**` | Persistent state shape, constants, event bus, and the authored content tables. `data/` is Phaser-free and imports nothing from `systems/`. | `core` ← `data` |
 
-Direction of flow: **data → systems → scene → React**. A system never reaches back into a
-component; a component never writes persistent state.
+Direction of flow: **data → world → systems → scene → React**. A system never reaches back
+into a component; a component never writes persistent state.
+
+`world/` is the PROCEDURAL layer (noise, biome resolution, POI generation, chunk painting).
+It sits below `systems/` and must not import one: when a generator product needs authored
+content mixed in — the POIs are the case — the merge belongs in a system, not in the
+generator (`systems/PoiRegistry` merges `proceduralPois()` with the regions).
+
+`entities/` own themselves, not the game: they read state and act, but never write
+persistent state. A reward a kill or an action produces goes through the system that owns it
+(`systems/KillReward` for kills, `ProgressionXP` for XP/gold/stamina), which is what keeps
+save-shape policy out of combat code. Enforced by the structure gate.
+
+## Scenes
+
+| Scene | Owns |
+|---|---|
+| `WorldScene.ts` (~940) | The live world: display list, cameras, entity lists, the per-frame system order, delegates. |
+| `MenuScene.ts` (50) | The title screen's lifecycle: backdrop textures, the backdrop, menu music, the `menu` screen state. |
+| `menuBackdrop.ts` | The title screen's animated world (sky, stars, moon, hills, castle, fog, weather, the wanderer, treeline) and its per-frame drift. |
 
 ## The scene is a coordinator, not a home for logic
 
@@ -38,6 +56,7 @@ delegate.
 ### World streaming & population
 | Module | Job |
 |---|---|
+| `PoiRegistry.ts` | **The one list of points of interest**: the generator's own POIs merged with every authored region's, cached per world seed. Discovery, minimap fog, markers, NPC spawning and quest targets all read this. |
 | `SpawnDirector.ts` | Deterministic population of chunks, resource nodes and enemies; elite rolls. |
 | `WorldEvents.ts` | Dynamic-event **scheduler** — pure and Phaser-free (roll, cooldown, one live). |
 | `WorldEventRuntime.ts` | The scene side of world events: builds, ticks and cleans up the live event. |
@@ -84,6 +103,7 @@ delegate.
 | `WeaponSpecials.ts` | Named legendary abilities, resolved from data. |
 | `AutoAttackSystem.ts` | Defensive auto-swing ("counter-attack assist"). |
 | `ProjectileSystem.ts` | Every bolt in flight: spawn, travel, collision, destroy. |
+| `KillReward.ts` | **What a kill pays**: loot rolls, gold, biome-scaled XP, profession XP, the reward beat, the stamina refund and the kill events. `Enemy.die()` only dies. |
 | `BossUISystem.ts` | Boss bar state, its HP refresh, and the boss's intro/defeat lines. |
 | `NpcSystem.ts` | NPC spawning, dialogue, recruit/trade actions, wander AI. |
 | `LootSystem.ts` | Ground drops: spawn, magnet drift, pickup, expiry. |
@@ -150,6 +170,8 @@ registry split for size; the aggregator (`items.ts`, `buildings.ts`, …) is the
 | Add a region interactable kind | Add the kind to `data/region.ts`, then handle it in `RegionInteractables` (or delegate to a new owner like `RegionStory`). |
 | Add a world event | Add a row to `data/worldEvents.ts`; the scheduler and runtime already handle roll/cooldown/cleanup. |
 | Add a UI panel | New file in `app/components/panels/`, export it from `panels/index.ts`, add its case to the panel hub. |
+| Change what an action pays | The owning system: kills in `KillReward`, XP/gold/reputation/stamina in `ProgressionXP`, drops in `LootSystem`. Never in an entity. |
+| Add a point of interest that should exist in the world | A region's `pois` array (`data/region*.ts`); `PoiRegistry.allPois()` merges it. Only procedural generation goes in `world/worldGen`. |
 | Add a screen-space overlay | Go through `ScreenOverlays.addScreenOverlay` — never `setScrollFactor(0)` on a raw object, because the world camera's zoom scales it. |
 | Change a gameplay number | It is derived: `ProgressionSystem` (stats) or `Constants`/`data` (tunables). |
 | Change when something is offered/unlocked | `QuestSystem.canOfferSideQuest` for quests; the requirement shape (`req` in `data/npcs.ts`) for NPCs. |

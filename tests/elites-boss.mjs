@@ -9,7 +9,7 @@ const { ELITES, ELITE_FOR_BASE } = await import('../src/game/data/elites.ts');
 const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { getItem } = await import('../src/game/data/items.ts');
 const { SIDE_QUESTS } = await import('../src/game/data/questsSide.ts');
-const { allPois } = await import('../src/game/world/worldGen.ts');
+const { allPois } = await import('../src/game/systems/PoiRegistry.ts');
 
 const ELITE_KEYS = Object.keys(ELITES);
 const BOSS_MOVES = new Set([
