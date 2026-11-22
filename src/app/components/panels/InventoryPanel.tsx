@@ -5,8 +5,8 @@ import GameState from '../../../game/core/GameState.ts';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
 import { RARITY, getItem } from '../../../game/data/items.ts';
-import { equip, sortedInventory, unequip, useConsumable } from '../../../game/systems/InventorySystem.ts';
-import { craft } from '../../../game/systems/CraftingSystem.ts';
+import { equip, sortedInventory, unequip, useConsumable } from '../../../game/systems/combat/InventorySystem.ts';
+import { craft } from '../../../game/systems/combat/CraftingSystem.ts';
 import type { InventoryEntry } from './types.ts';
 import type { EquippedItem } from './types.ts';
 import { Icon } from './shared.tsx';
@@ -31,21 +31,21 @@ export function InventoryPanel(): JSX.Element {
       if (d?.use) {
         const u: any = useConsumable(e.id, GameState.s.player.derived?.healPower);
                 import('../../../game/main.ts').then((m: any) => m.worldScene()?.player?.applyConsumableEffects?.(u));
-                if (d.id === 'treasure_map') import('../../../game/systems/QuestEngine.ts').then((q2: any) => q2.handleEvent({ type: 'useItem', itemId: 'treasure_map' }));
+                if (d.id === 'treasure_map') import('../../../game/systems/narrative/QuestEngine.ts').then((q2: any) => q2.handleEvent({ type: 'useItem', itemId: 'treasure_map' }));
         return;
       }
     }
     // gear → equip (equip() itself validates the entry exists)
-    import('../../../game/systems/InventorySystem.ts').then((I: any) => {
+    import('../../../game/systems/combat/InventorySystem.ts').then((I: any) => {
       I.equip(ref);
     });
-    import('../../../game/systems/ProgressionSystem.ts').then((P: any) => P.recompute());
+    import('../../../game/systems/combat/ProgressionSystem.ts').then((P: any) => P.recompute());
     import('../../../game/main.ts').then((m: any) => m.worldScene()?.refreshPlayerSkin?.());
   };
 
   const handleUnequip = (slot: string): void => {
     unequip(slot);
-    import('../../../game/systems/ProgressionSystem.ts').then((P: any) => P.recompute());
+    import('../../../game/systems/combat/ProgressionSystem.ts').then((P: any) => P.recompute());
     import('../../../game/main.ts').then((m: any) => m.worldScene()?.refreshPlayerSkin?.());
   };
 
@@ -100,7 +100,7 @@ export function InventoryPanel(): JSX.Element {
                   title="Salvage for 50% materials (needs forge nearby)"
                   onClick={(ev) => {
                     ev.stopPropagation();
-                                        import('../../../game/systems/CraftingSystem.ts').then((C: any) => {
+                                        import('../../../game/systems/combat/CraftingSystem.ts').then((C: any) => {
                       const r: any = C.salvage(e.iid || e.id);
                       GameState.toast(r.ok
                         ? { title: `Salvaged ${d.name}`, msg: Object.entries(r.refund || {}).map(([id, n]) => `${getItem(id)?.name}×${n}`).join(', ') || 'Scrap.', kind: 'craft', icon: undefined }

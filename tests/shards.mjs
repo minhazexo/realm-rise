@@ -13,7 +13,7 @@ let passed = 0, failed = 0;
 const ok = (cond, label) => { if (cond) { passed++; } else { failed++; console.error('  ✗ ' + label); } };
 
 const { SHARDS, BARRIER, SHARD_ORDER, SHARD_FLAGS, shardById } = await import('../src/game/data/storyShards.ts');
-const rules = await import('../src/game/systems/ShardSystem.ts');
+const rules = await import('../src/game/systems/narrative/ShardSystem.ts');
 const { BOOKS, BOSS_VOICE, bossVoice } = await import('../src/game/data/voices.ts');
 const { getNpcDef, npcLines } = await import('../src/game/data/npcs.ts');
 const region = await import('../src/game/data/regionAshen.ts');
@@ -22,8 +22,8 @@ const { getItem } = await import('../src/game/data/items.ts');
 const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { isWaterAt } = await import('../src/game/world/worldGen.ts');
 const GameState = (await import('../src/game/core/GameState.ts')).default;
-const QuestSystem = await import('../src/game/systems/QuestSystem.ts');
-const QuestEngine = await import('../src/game/systems/QuestEngine.ts');
+const QuestSystem = await import('../src/game/systems/narrative/QuestSystem.ts');
+const QuestEngine = await import('../src/game/systems/narrative/QuestEngine.ts');
 
 const {
   ASHEN_SUBREGIONS, ASHEN_LANDMARKS, ASHEN_ENCOUNTERS, ASHEN_INTERACTABLES,
@@ -56,7 +56,7 @@ ok(SHARDS.map((s) => s.order).join() === '1,2,3,4,5', 'the order field runs 1…
 ok(SHARD_ORDER.join() === SHARDS.map((s) => s.id).join(), 'SHARD_ORDER is the definitions, in order');
 ok(SHARD_FLAGS.length === 5 && SHARD_FLAGS.every((f) => SHARDS.some((s) => s.flag === f)),
    'SHARD_FLAGS lists exactly the five shard flags');
-ok(shardById('shard_ash')?.name === 'The Ash Shard', 'shardById resolves a fragment by id');
+ok(shardById('shard_ash')?.name === 'The Ashen Reliquary', 'shardById resolves the reliquary by its stable id');
 ok(shardById('nope') === null, 'shardById returns null for an unknown id');
 for (const s of SHARDS) {
   ok(Array.isArray(s.inscription) && s.inscription.length >= 3, `${s.id}: reads as three or more lines of inscription`);

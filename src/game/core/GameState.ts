@@ -8,9 +8,9 @@ import type { GameRootState, CharOpts, PlayerAlloc } from './stateFactory.ts';
 import type { DifficultyKey } from './Constants.ts';
 import { CH, Bus } from './EventBus.ts';
 import { getItem, repairInstanceIds } from '../data/items.ts';
-import { applyBoon } from '../systems/LegacyStore.ts';
-import { migrateSave } from '../systems/SaveSystem.ts';
-import type { SavePayload } from '../systems/SaveSystem.ts';
+import { applyBoon } from '../systems/narrative/LegacyStore.ts';
+import { migrateSave } from '../systems/persistence/SaveSystem.ts';
+import type { SavePayload } from '../systems/persistence/SaveSystem.ts';
 
 export interface ToastOptions {
   title?: string;
@@ -142,12 +142,6 @@ class GameStore {
     } catch {
       this.state = stateJson as GameRootState;
     }
-    // TEMPORARY god-mode (user request): every loaded save plays immortal
-    // until the default is flipped back. The Settings toggle can still turn
-    // it off mid-session, but the next load re-enables it.
-    try {
-      if (this.state?.settings) this.state.settings.immortal = true;
-    } catch { /* never block loading */ }
     // Ensure the loaded game is not stuck in a dead state
     if (this.state) {
       this.state.session_dead = false;

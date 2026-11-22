@@ -17,8 +17,8 @@ import {
   currentSettings,
   clearMenuCache,
   isImmortal
-} from '../src/game/systems/SettingsSystem.ts';
-import { SETTINGS_VERSION } from '../src/game/systems/SettingsSystem.ts';
+} from '../src/game/systems/environment/SettingsSystem.ts';
+import { SETTINGS_VERSION } from '../src/game/systems/environment/SettingsSystem.ts';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } else console.log('✓ ' + m); };
@@ -253,7 +253,7 @@ const storm = cp.getFogColor();
 ok(storm !== col, 'getFogColor shifts for storm weather');
 
 console.log('— PostFXSystem helpers —');
-const pfx = await import('../src/game/systems/PostFXSystem.ts');
+const pfx = await import('../src/game/systems/environment/PostFXSystem.ts');
 ok(typeof pfx.default === 'function', 'PostFXSystem default export is a class');
 ok(typeof pfx.graphicsQualityNum === 'function', 'graphicsQualityNum exported');
 ok(typeof pfx.graphicsQualityAtLeast === 'function', 'graphicsQualityAtLeast exported');
@@ -277,7 +277,7 @@ ok(pfx.graphicsQualityAtLeast('high') === false, 'med < high');
 // traces the same curve, and it lands exactly on the target.
 console.log('— Camera zoom easing —');
 {
-  const { applyCamZoom } = await import('../src/game/systems/CameraSystem.ts');
+  const { applyCamZoom } = await import('../src/game/systems/environment/CameraSystem.ts');
   const fake = () => ({ cameras: { main: { zoom: 1, setZoom(z) { this.zoom = z; } } } });
   const frames = (scene, n, dt = 16.67) => { for (let i = 0; i < n; i++) applyCamZoom(scene, dt); };
 

@@ -13,8 +13,11 @@ interface ArmorDefOpts {
 }
 
 const armorDef = (id: string, name: string, slot: ArmorSlot, armor: number, tier: number, warmth: number, opts: ArmorDefOpts = {}): void => {
-  void name;
   def(id, {
+    // The name is the item's player-facing identity. This helper used to
+    // discard it (`void name;`), so all 19 armor pieces rendered their raw
+    // internal ids in the inventory.
+    name,
     cat: 'armor',
     slot,
     armor,
@@ -36,16 +39,16 @@ armorDef('iron_plate', 'Iron Cuirass', 'chest', 14, 3, 3, { rarity: 'uncommon', 
 armorDef('steel_plate', 'Steel Plate Armor', 'chest', 21, 4, 4, { rarity: 'rare', c1: '#a3bedb', value: 280, desc: 'The gleam of a real soldier.' });
 armorDef('royal_armor', 'Royal Warplate', 'chest', 27, 5, 4, { rarity: 'epic', c1: '#c9a24b', value: 480, mods: { willpower: 2 }, desc: 'Gilded warplate for a ruler who leads from the front.' });
 armorDef('legendary_aegis', 'Aegis of the Realm', 'chest', 34, 6, 5, { rarity: 'mythic', c1: '#e8d48a', value: 850, mods: { strength: 2, defense: 2, agility: 1 }, desc: 'Woven by the Ancient Order from star-metal.' });
-armorDef('cap_cloth', 'Padded Cap', 'helmet', 2, 0, 1, { c1: '#87705a', value: 6 });
-armorDef('helm_leather', 'Leather Helm', 'helmet', 4, 1, 1, { c1: '#8a6540', value: 24 });
-armorDef('helm_iron', 'Iron Helm', 'helmet', 8, 3, 2, { rarity: 'uncommon', c1: '#aeb4bd', value: 70 });
-armorDef('helm_steel', 'Steel Crown-Guard', 'helmet', 12, 4, 2, { rarity: 'rare', c1: '#a3bedb', value: 150 });
+armorDef('cap_cloth', 'Padded Cap', 'helmet', 2, 0, 1, { c1: '#87705a', value: 6, desc: 'Wool, straw and hope. Keeps the rain off your thinking.' });
+armorDef('helm_leather', 'Leather Helm', 'helmet', 4, 1, 1, { c1: '#8a6540', value: 24, desc: 'Boiled hide shaped over a kettle. Turns a claw, once.' });
+armorDef('helm_iron', 'Iron Helm', 'helmet', 8, 3, 2, { rarity: 'uncommon', c1: '#aeb4bd', value: 70, desc: 'Dented in three places and still the best thing you own.' });
+armorDef('helm_steel', 'Steel Crown-Guard', 'helmet', 12, 4, 2, { rarity: 'rare', c1: '#a3bedb', value: 150, desc: 'A soldier’s helm with a kingdom’s crest hammered flat.' });
 armorDef('crown_realm', 'Crown of the Realm', 'helmet', 10, 5, 3, { rarity: 'mythic', c1: '#e8c94b', value: 600, mods: { willpower: 3 }, desc: 'Weightier than any helm: responsibility.' });
 armorDef('gloves_leather', 'Leather Gloves', 'gloves', 2, 1, 1, { c1: '#8a6540', value: 16, desc: '+ gathering speed.' });
-armorDef('gloves_iron', 'Iron Gauntlets', 'gloves', 6, 3, 2, { rarity: 'uncommon', c1: '#aeb4bd', value: 64, mods: { strength: 1 } });
-armorDef('boots_worn', 'Worn Boots', 'boots', 1, 0, 1, { c1: '#7c6c52', value: 8 });
+armorDef('gloves_iron', 'Iron Gauntlets', 'gloves', 6, 3, 2, { rarity: 'uncommon', c1: '#aeb4bd', value: 64, mods: { strength: 1 }, desc: 'Your grip stops being a suggestion.' });
+armorDef('boots_worn', 'Worn Boots', 'boots', 1, 0, 1, { c1: '#7c6c52', value: 8, desc: 'Someone else’s boots, broken in for you by a long walk.' });
 armorDef("boots_ranger", "Ranger's Boots", 'boots', 3, 1, 1, { c1: '#6d5636', value: 42, mods: { agility: 1 }, desc: 'Silent on moss, sure on scree.' });
-armorDef('boots_steel', 'Steel Greaves', 'boots', 7, 4, 2, { rarity: 'rare', c1: '#a3bedb', value: 140 });
+armorDef('boots_steel', 'Steel Greaves', 'boots', 7, 4, 2, { rarity: 'rare', c1: '#a3bedb', value: 140, desc: 'Heavy, loud, and the reason you are still standing.' });
 
 def('wolfsfang_ring', { name: 'Wolfsfang Ring', cat: 'trinket', slot: 'ring', rarity: 'uncommon', value: 90, mods: { critFlat: 0.06 }, icon: { shape: 'ring', c1: '#b9a06a' }, desc: 'Trophy of the Alpha Wolf.' });
 def('bear_charm_amulet', { name: 'Bear-Heart Amulet', cat: 'trinket', slot: 'amulet', rarity: 'rare', value: 160, mods: { flatHp: 30 }, icon: { shape: 'amulet', c1: '#a34d3e' }, desc: 'Grants the endurance of a hibernating bear.' });
@@ -62,6 +65,6 @@ def('dragon_scale', { name: 'Dragon Scale', rarity: 'legendary', value: 420, ico
 def('royal_artifact', { name: 'Royal Artifact', rarity: 'mythic', value: 800, icon: { shape: 'relic', c1: '#e8c94b' }, desc: 'Crown-jewels of the vanished dynasty.' });
 def('ancient_relic', { name: 'Ancient Relic', rarity: 'epic', value: 260, icon: { shape: 'relic', c1: '#8fd0bd' }, desc: 'Meaningless bauble or message in metal?' });
 
-def('ancient_key', { cat: 'special', stack: 20, value: 0, icon: { shape: 'key', c1: '#7be0c3' }, desc: 'Opens what the ancients locked away.' });
-def('treasure_map', { cat: 'special', stack: 1, value: 100, usable: true, icon: { shape: 'map', c1: '#c9a97a' }, desc: 'X marks somewhere promising… Use it to reveal a cache.' });
-def('founders_kit', { name: "Founder's Kit", cat: 'special', stack: 1, value: 0, icon: { shape: 'kit', c1: '#8a6540' }, desc: 'Tools, plans and one stubborn banner. Place your Town Hall.' });
+def('ancient_key', { name: 'Ancient Key', cat: 'special', stack: 20, value: 45, icon: { shape: 'key', c1: '#7be0c3' }, desc: 'Opens what the ancients locked away. Warm when a door is near.' });
+def('treasure_map', { name: 'Treasure Map', cat: 'special', stack: 1, value: 100, usable: true, icon: { shape: 'map', c1: '#c9a97a' }, desc: 'X marks somewhere promising… Use it to reveal a cache.' });
+def('founders_kit', { name: "Founder's Kit", cat: 'special', stack: 1, value: 120, icon: { shape: 'kit', c1: '#8a6540' }, desc: 'Tools, plans and one stubborn banner. Place your Town Hall.' });

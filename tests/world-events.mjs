@@ -16,7 +16,7 @@ const {
 } = await import('../src/game/data/worldEvents.ts');
 const {
   createEventRuntime, tickEvents, forceEndEvent, eventBlockReason, pickKind, mulberry32,
-} = await import('../src/game/systems/WorldEvents.ts');
+} = await import('../src/game/systems/world/WorldEvents.ts');
 const { CHEST_POOLS } = await import('../src/game/data/lootTables.ts');
 const { getEnemyDef } = await import('../src/game/data/enemies.ts');
 const { getNpcDef } = await import('../src/game/data/npcs.ts');

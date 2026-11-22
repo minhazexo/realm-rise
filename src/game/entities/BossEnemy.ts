@@ -5,7 +5,7 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { Bus } from '../core/EventBus.ts';
-import { photosensitiveMode, shakeAllowed } from '../systems/SettingsSystem.ts';
+import { photosensitiveMode, shakeAllowed } from '../systems/environment/SettingsSystem.ts';
 import Enemy from './Enemy.ts';
 
 export default class BossEnemy extends Enemy {
@@ -26,7 +26,7 @@ export default class BossEnemy extends Enemy {
     // Arena telegraph:
     // show the leash radius on the ground so the player can see how far
     // they can kite before the boss resets. Pulsing ring, auto-fades.
-    import('../systems/CelebrationFX.ts').then((c) =>
+    import('../systems/environment/CelebrationFX.ts').then((c) =>
       c.bossArenaRing(scene, x, y, this.radius));
   }
 
@@ -45,7 +45,6 @@ export default class BossEnemy extends Enemy {
     if (idx !== this.phaseIndex) {
       this.phaseIndex = idx;
       const ph = phases[idx];
-      Bus.emit('boss-phase', { key: this.key, phase: idx + 1 });
       if (ph?.enrageSpeed) this.atkSpd *= ph.enrageSpeed;
       if (ph?.summon) this.summon(ph.summon.type, ph.summon.count);
       (this.scene as any).bossUI?.setPhase(idx + 1);

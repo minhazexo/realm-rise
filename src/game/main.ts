@@ -5,13 +5,15 @@ import GameState from './core/GameState.ts';
 import { Bus, CH } from './core/EventBus.ts';
 import MenuScene from './scenes/MenuScene.ts';
 import WorldScene from './scenes/WorldScene.ts';
-import { initAudio, installAudioBus, playSfx, applyVolumes } from './systems/AudioSystem.ts';
+import { initAudio, installAudioBus, playSfx, applyVolumes } from './systems/audio/AudioSystem.ts';
 import { installBridge } from './core/BridgeSystem.ts';
-import { recompute } from './systems/ProgressionSystem.ts';
-import { refresh as kingdomRefresh } from './systems/KingdomSystem.ts';
-import { installSettingsSystem, applySettings, withPrefs, clearMenuCache, currentSettings } from './systems/SettingsSystem.ts';
+import { recompute } from './systems/combat/ProgressionSystem.ts';
+import { refresh as kingdomRefresh } from './systems/economy/KingdomSystem.ts';
+import { installSettingsSystem, applySettings, withPrefs, clearMenuCache, currentSettings } from './systems/environment/SettingsSystem.ts';
 import type { CharOpts, GameSettings } from './core/stateFactory.ts';
 import type { DifficultyKey } from './core/Constants.ts';
+import { renderProfile, setRenderStyle, renderScale } from './core/VisualProfile.ts';
+import type { RenderStyle } from './core/VisualProfile.ts';
 
 /** Scene handle with the game-specific fields the debug console touches. */
 export type WorldSceneHandle = Phaser.Scene & { [key: string]: any };
@@ -32,20 +34,88 @@ export function applyFpsCap(settings?: unknown): void {
 export let game: Phaser.Game | null = null;
 export let currentSceneKey = 'MenuScene';
 
+/**
+ * Apply the render style to the LIVE game (Settings → Render style).
+ *
+ * Texture filtering and camera pixel-snapping change immediately; `antialias`
+ * and `mipmap` are fixed when the WebGL context is created, so those two take
+ * effect on the next reload. Unknown/missing style falls back to painterly.
+ */
+export function applyVisualProfile(style?: unknown): void {
+  // Settings → Render style is the player's choice; the profile owns the
+  // pipeline state, so pushing it here is the only place the style changes.
+  const active: RenderStyle = setRenderStyle(style);
+  const pixel: boolean = active === 'pixel';
+  const filter: number = pixel ? Phaser.Textures.FilterMode.NEAREST : Phaser.Textures.FilterMode.LINEAR;
+  try {
+    const list: Record<string, unknown> | undefined = (game?.textures as unknown as { list?: Record<string, unknown> })?.list;
+    if (list) {
+      for (const key of Object.keys(list)) {
+        try { game?.textures?.get(key)?.setFilter(filter); } catch { /* per-texture */ }
+      }
+    }
+  } catch { /* textures unavailable (headless/tests) */ }
+  try {
+    for (const scene of game?.scene?.getScenes(true) ?? []) {
+      if (scene?.cameras?.main) scene.cameras.main.roundPixels = pixel;
+    }
+  } catch { /* scenes unavailable */ }
+}
+
+/**
+ * Render the game at **device** pixels.
+ *
+ * Phaser 4 sizes the canvas in CSS px, so on a display with devicePixelRatio > 1
+ * the browser upscales the whole frame and everything the player sees is soft —
+ * a 125% Windows display loses 20% of resolution before a single sprite is
+ * drawn. The backing store is set to `CSS × renderScale()` and the canvas is
+ * pinned back to its CSS size, so the browser scales it *down* instead; the
+ * camera zoom is multiplied by the same factor (CameraSystem) so the visible
+ * world is unchanged. Cheap when there is nothing to do (early return).
+ */
+export function applyDevicePixelRatio(): void {
+  try {
+    const canvas: HTMLCanvasElement | undefined = game?.canvas;
+    const host: HTMLElement | null | undefined = canvas?.parentElement;
+    if (!canvas || !host) return;
+    const dpr: number = renderScale();
+    const rect = host.getBoundingClientRect();
+    const cssW: number = Math.max(1, Math.round(rect.width));
+    const cssH: number = Math.max(1, Math.round(rect.height));
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    const w: number = Math.round(cssW * dpr);
+    const h: number = Math.round(cssH * dpr);
+    const scale = game?.scale as unknown as {
+      width: number; height: number; resize(w: number, h: number): void; refresh(): void;
+    } | undefined;
+    if (!scale || (scale.width === w && scale.height === h)) return;
+    scale.resize(w, h);
+    // NONE mode does not refresh itself: bounds + displayScale (pointer mapping)
+    // have to be recomputed after the backing store changes size.
+    scale.refresh();
+  } catch { /* headless / tests */ }
+}
+
 export function createGame(containerId = 'game-container'): Phaser.Game {
   const el = document.getElementById(containerId);
+  // Boot settings (browser prefs over defaults) are read BEFORE the Phaser
+  // context exists: antialias/mipmap are fixed at context creation
+  // (docs/ART-DIRECTION.md §4), so the render profile cannot be chosen later.
+  // `visualProfile` is the player-facing toggle; texture filtering + camera
+  // pixel-snapping still apply live via applyVisualProfile().
+  const bootSettings: GameSettings = withPrefs(GameState.s?.settings);
+  // Push the player's style into the profile BEFORE the config is built: the
+  // art layer reads the active style while painting textures (supersampling).
+  const bootStyle: RenderStyle = setRenderStyle(bootSettings.visualProfile);
   // Phaser-specific render keys (subPixel / mipmap) that this Phaser build
   // accepts at runtime; the intersection keeps them legal in the config.
+  // Rendering pipeline is owned by core/VisualProfile.ts (docs/ART-DIRECTION.md).
+  // Painterly = smooth filtering + mipmaps + sub-pixel; 'pixel' reverts it.
   const render: Phaser.Types.Core.RenderConfig & Record<string, unknown> = {
-    // Pixel-art crispness: nearest-neighbour filtering, no sub-pixel blur
-    antialias: false,
-    pixelArt: true,
-    roundPixels: true,
-    subPixel: false,
+    ...renderProfile(bootStyle),
     // PowerPreference: prefer high-performance GPU for shader effects.
-    powerPreference: 'high-performance',
-    // Disable mipmaps — they blur pixel art when the camera zooms.
-    mipmap: false
+    powerPreference: 'high-performance'
   };
   // The `& Record<string, unknown>` intersection keeps Phaser-specific keys
   // (pipeline) legal without weakening the config type.
@@ -57,15 +127,22 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
     backgroundColor: '#0a0e16',
     physics: {
       default: 'arcade',
-      arcade: { gravity: { x: 0, y: 0 }, debug: false }
+      // RTree broadphase: the live world can hold hundreds of bodies, and
+      // pairwise AABB checks are quadratic. Enabled explicitly so a future
+      // config edit cannot silently fall back to brute force.
+      arcade: { gravity: { x: 0, y: 0 }, debug: false, useTree: true }
     },
     autoRound: false,
     audio: { noAudio: true },
+    // The canvas is sized by applyDevicePixelRatio() — CSS size in the layout,
+    // backing store at device pixels. RESIZE mode refuses a manual size (it
+    // re-derives both from the parent every resize), which is exactly the
+    // blurry path on a DPR > 1 display, so the sizing is owned here instead.
     scale: {
-      mode: Phaser.Scale.RESIZE,
-      width: '100%',
-      height: '100%',
-      autoCenter: Phaser.Scale.CENTER_BOTH
+      mode: Phaser.Scale.NONE,
+      width: Math.round((el ? el.clientWidth : window.innerWidth) * renderScale()),
+      height: Math.round((el ? el.clientHeight : window.innerHeight) * renderScale()),
+      autoCenter: Phaser.Scale.NO_CENTER
     },
     render,
     // Phaser 4 ships the FX pipelines automatically when the camera calls
@@ -86,9 +163,16 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
   // already respects browser-level prefs (uiScale, textSize, volumes,
   // reducedMotion) even before a save is loaded.
   installSettingsSystem();
-  applySettings(withPrefs(GameState.s?.settings), { busNotify: false });
+  applySettings(bootSettings, { busNotify: false });
   applyFpsCap(currentSettings());
+  applyVisualProfile(bootSettings.visualProfile);
+  // Render at device pixels from the first frame, and keep it that way when the
+  // window/viewport changes (Phaser's RESIZE mode would otherwise drop back to
+  // CSS-px sizing on every resize, which is the blurry path).
+  applyDevicePixelRatio();
+  window.addEventListener('resize', () => applyDevicePixelRatio());
   Bus.on('settings-applied', (s: GameSettings) => applyFpsCap(s));
+  Bus.on('settings-applied', (s: GameSettings) => applyVisualProfile(s?.visualProfile));
   installBridge();
   Bus.on('play-sound', (name: string) => playSfx(name));
 
@@ -118,6 +202,7 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
               'rise.spawnEnemy(key, n=1) — spawn enemies near player',
               'rise.spawnResource(type, n=1) — spawn gather nodes near player',
               'rise.teleport(x, y) — move player + sync GameState',
+              'rise.travel(regionId) — fast travel to an unlocked region waypoint',
               'rise.setLevel(n) — award XP until level reached (cap 50)',
               'rise.clearInventory() — empty inventory',
               'rise.state() — one-line summary',
@@ -129,7 +214,7 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
             const n = Math.max(1, Math.floor(Number(qty) || 1));
             const { getItem } = await import('./data/items.ts');
             if (!getItem(itemId)) return `unknown item: ${itemId}`;
-            const { addItem, countItem } = await import('./systems/InventorySystem.ts');
+            const { addItem, countItem } = await import('./systems/combat/InventorySystem.ts');
             const left = addItem(itemId, n);
             const got = n - left;
             if (got <= 0) return `inventory full — could not add ${itemId}`;
@@ -178,15 +263,20 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
             if (!sp) return 'world scene not running or no player sprite';
             const nx = Number(x), ny = Number(y);
             if (!Number.isFinite(nx) || !Number.isFinite(ny)) return 'usage: rise.teleport(x, y)';
-            try {
-              if (sp.body && typeof sp.body.reset === 'function') sp.body.reset(nx, ny);
-              else if (typeof sp.setPosition === 'function') sp.setPosition(nx, ny);
-              else { sp.x = nx; sp.y = ny; }
-            } catch { try { sp.x = nx; sp.y = ny; } catch { /* sprite write failed */ } }
-            GameState.s.world.px = Math.round(nx);
-            GameState.s.world.py = Math.round(ny);
+            // The move itself lives on the scene (WorldScene.movePlayer), so the
+            // dev command and region fast travel cannot drift apart.
+            if (typeof ws?.movePlayer !== 'function') return 'world scene has no movePlayer';
+            ws.movePlayer(nx, ny);
             return `teleported to (${nx}, ${ny})`;
           } catch (e) { return `teleport failed: ${errMsg(e)}`; }
+        },
+        travel(regionId: string) {
+          try {
+            const ws = worldScene();
+            if (typeof ws?.regionTravel !== 'function') return 'world scene not running — enter the world first';
+            const landed = ws.regionTravel(String(regionId));
+            return landed ? `travelled to ${landed}` : `cannot travel to '${regionId}' (not unlocked, or no waypoint authored)`;
+          } catch (e) { return `travel failed: ${errMsg(e)}`; }
         },
         async setLevel(n: number) {
           try {
@@ -194,7 +284,7 @@ export function createGame(containerId = 'game-container'): Phaser.Game {
             const P = GameState.s?.player;
             if (!P) return 'no player state';
             if (P.level >= target) return `already level ${P.level}`;
-            const { awardXP, xpToNext } = await import('./systems/ProgressionXP.ts');
+            const { awardXP, xpToNext } = await import('./systems/combat/ProgressionXP.ts');
             let guard = 0;
             while (GameState.s.player.level < target && guard++ < 500) {
               awardXP(xpToNext(GameState.s.player.level), 'debug');
@@ -234,6 +324,35 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
+/** Scene statuses where a `start()` would tear down an in-flight boot. */
+const BOOTING_OR_LIVE: ReadonlySet<number> = new Set<number>([
+  Phaser.Scenes.INIT,
+  Phaser.Scenes.START,
+  Phaser.Scenes.LOADING,
+  Phaser.Scenes.CREATING,
+  Phaser.Scenes.RUNNING,
+  Phaser.Scenes.PAUSED,
+  Phaser.Scenes.SLEEPING,
+]);
+
+/**
+ * Start WorldScene only when it is not already booting or live.
+ *
+ * `scene.isActive()` is false while the scene is LOADING/CREATING, so the old
+ * `if (!isActive()) start()` restarted the scene mid-load — the asset queue then
+ * kept the first load's files and stalled at 32/41, leaving the scene with no
+ * player. The status window 2..7 covers START → SLEEPING.
+ */
+function startWorldIfDown(): void {
+  const ws = game?.scene?.getScene('WorldScene');
+  const status: number =
+    (ws?.sys?.settings as { status?: number } | undefined)?.status ?? Phaser.Scenes.PENDING;
+  // Anything past PENDING and before SHUTDOWN is booting or live — starting it
+  // again would restart the scene mid-load.
+  if (ws && BOOTING_OR_LIVE.has(status)) return;
+  game?.scene.start('WorldScene');
+}
+
 /** React asks to jump to a screen: world | menu. */
 export function setScreen(screen: string): void {
   const S = GameState.s;
@@ -244,11 +363,8 @@ export function setScreen(screen: string): void {
     if (ms && ms.scene.isActive()) {
       game?.scene.stop('MenuScene');
     }
-    // Don't restart WorldScene if it's already running (e.g. intro → world)
-    const ws = game?.scene?.getScene('WorldScene');
-    if (!ws || !ws.scene.isActive()) {
-      game?.scene.start('WorldScene');
-    }
+    // Don't restart WorldScene if it is already running or still booting.
+    startWorldIfDown();
     currentSceneKey = 'WorldScene';
     GameState.session.screen = 'world';
     GameState.session.uiPanel = null;
@@ -300,7 +416,7 @@ export function loadGameIntoWorld(saveData?: unknown): void {
   // Always stop MenuScene and cleanly start/restart WorldScene with the loaded save
   game?.scene.stop('MenuScene');
   game?.scene.stop('WorldScene');
-  game?.scene.start('WorldScene');
+  startWorldIfDown();
   currentSceneKey = 'WorldScene';
   GameState.session.screen = 'world';
   GameState.session.uiPanel = null;
@@ -309,7 +425,7 @@ export function loadGameIntoWorld(saveData?: unknown): void {
   // Reboarding: returning players get a one-line recap, not a cold map.
   try {
     if ((GameState.s?.meta?.playSeconds || 0) > 600) {
-      import('./systems/TutorialSystem.ts').then((m) => {
+      import('./systems/narrative/TutorialSystem.ts').then((m) => {
         try { GameState.toast({ title: '◈ The realm remembers', msg: m.welcomeBackText(), kind: 'quest', dur: 7000 }); }
         catch { /* toast only */ }
       }).catch(() => {});
@@ -324,6 +440,8 @@ export function sceneCommand(cmd: string, arg?: unknown): void {
     case 'placeBuild': setPendingBuild(arg as string); break;
     case 'togglePanel': (game?.scene.getScene('WorldScene') as WorldSceneHandle | null)?.togglePanel?.(arg); break;
     case 'togglePause': (game?.scene.getScene('WorldScene') as WorldSceneHandle | null)?.togglePause?.(); break;
+    case 'regionTravel': (game?.scene.getScene('WorldScene') as WorldSceneHandle | null)?.regionTravel?.(arg); break;
+
     case 'float': break;
     case 'playSfx': playSfx(arg as string); break;
     default: break;

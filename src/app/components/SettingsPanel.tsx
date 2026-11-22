@@ -13,8 +13,8 @@ import {
   SETTINGS_DEFAULTS,
   KEYBINDS_DEFAULT,
   lastApplied
-} from '../../game/systems/SettingsSystem.ts';
-import { playSfx } from '../../game/systems/AudioSystem.ts';
+} from '../../game/systems/environment/SettingsSystem.ts';
+import { playSfx } from '../../game/systems/audio/AudioSystem.ts';
 
 void GameState;
 void CH;
@@ -111,6 +111,14 @@ export default function SettingsPanel({ onBack }: SettingsPanelProps): JSX.Eleme
             labels={{ low: 'Low', med: 'Med', high: 'High', ultra: 'Ultra' }}
           />
         </Row>
+        <Row label="Render style" hint="Painterly = soft painted look. Pixel = crisp retro. Filtering changes instantly; antialias/mipmap apply on reload.">
+          <PillSelect
+            value={s.visualProfile || 'painterly'}
+            options={SETTINGS_LIMITS.visualProfile.allowed}
+            onChange={(v) => onScalar('visualProfile', v)}
+            labels={{ painterly: 'Painterly', pixel: 'Pixel' }}
+          />
+        </Row>
         <Row label="Particles" hint="Reduces on-screen sparks, smoke, fireflies.">
           <PillSelect
             value={s.particles}
@@ -196,6 +204,9 @@ export default function SettingsPanel({ onBack }: SettingsPanelProps): JSX.Eleme
             offLabel="OFF"
             danger
           />
+        </Row>
+        <Row label="Infinite energy" hint="Stamina stays full. Sprinting, dodging and attacks never consume it.">
+          <OnOffButton value={s.infiniteEnergy === true} onChange={(v) => onScalar('infiniteEnergy', v)} onLabel="ON" offLabel="OFF" />
         </Row>
         <Row label="Difficulty" hint="Affects enemy power, resource yields, and survival pressure.">
           <PillSelect

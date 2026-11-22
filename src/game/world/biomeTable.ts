@@ -37,6 +37,17 @@ export interface BiomeEntry {
   grassDark: string;
   /** Accent colour hex (foliage, highlights). */
   accent: string;
+  // ── Painterly palette (docs/ART-DIRECTION.md §7) ──────────────────────
+  // Value/light routing for the vector-flat pass. Optional so the pixel
+  // profile keeps working unchanged; painters fall back to the colours above.
+  /** Gameplay contour / dark line hex. */
+  contour?: string;
+  /** Soft ground-shadow hex. */
+  shadow?: string;
+  /** Warm highlight / rim hex. */
+  highlight?: string;
+  /** Distant atmospheric haze hex. */
+  haze?: string;
   /** Decoration density multiplier (0-1). */
   decoDensity: number;
   /** Music mood key for the audio system. */
@@ -78,6 +89,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   plains: {
     id: 'plains', label: 'Sunlit Plains',
     grass: '#7fa653', grassDark: '#6e9448', accent: '#a8bf68',
+    contour: '#2c3a1f', shadow: '#4a5f34', highlight: '#c6d98a', haze: '#cfe0b8',
     decoDensity: 0.16, musicMood: 'day',
     resources: [
       { type: 'berry', weight: 5 },
@@ -101,6 +113,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   forest: {
     id: 'forest', label: 'The Deepwood',
     grass: '#5d8f46', grassDark: '#527d3d', accent: '#71a052',
+    contour: '#22321c', shadow: '#3a5429', highlight: '#a8d078', haze: '#9fbf92',
     decoDensity: 0.3, musicMood: 'explore',
     resources: [
       { type: 'tree_oak', weight: 10 },
@@ -130,6 +143,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   riverlands: {
     id: 'riverlands', label: 'Riverlands',
     grass: '#6ea857', grassDark: '#619b4c', accent: '#86bd63',
+    contour: '#27402a', shadow: '#45703a', highlight: '#bfe08a', haze: '#cfe3d0',
     waterEdge: true, decoDensity: 0.2,
     resources: [
       { type: 'reed', weight: 8 },
@@ -151,6 +165,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   swamp: {
     id: 'swamp', label: 'Murkfen Swamp',
     grass: '#557a48', grassDark: '#49683e', accent: '#6b9256',
+    contour: '#242f1d', shadow: '#3b4f31', highlight: '#8fae6a', haze: '#8fa07c',
     murkyWater: true, decoDensity: 0.22,
     resources: [
       { type: 'herb', weight: 8 },
@@ -175,6 +190,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   mountains: {
     id: 'mountains', label: 'Grayfang Mountains',
     grass: '#8c8f95', grassDark: '#7d8085', accent: '#9ba0a8',
+    contour: '#3a3d44', shadow: '#5f636b', highlight: '#d6dae1', haze: '#b9c0cb',
     rocky: true, decoDensity: 0.18,
     resources: [
       { type: 'rock_small', weight: 9 },
@@ -198,6 +214,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   desert: {
     id: 'desert', label: 'Ashen Dunes',
     grass: '#d5b26a', grassDark: '#c7a25c', accent: '#e0c07a',
+    contour: '#6b5325', shadow: '#a98a48', highlight: '#f3e0a8', haze: '#e8d6a6',
     sandy: true, decoDensity: 0.08,
     resources: [
       { type: 'cactus', weight: 7 },
@@ -218,6 +235,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   frozen: {
     id: 'frozen', label: 'Frozen North',
     grass: '#dfe7ee', grassDark: '#cfdbe4', accent: '#eef4f9',
+    contour: '#5b6b7d', shadow: '#a9bacb', highlight: '#ffffff', haze: '#dbe9f4',
     snowy: true, decoDensity: 0.14,
     resources: [
       { type: 'ice_shard', weight: 7 },
@@ -238,6 +256,7 @@ export const BIOMES: Record<string, BiomeEntry> = {
   volcanic: {
     id: 'volcanic', label: 'Emberwaste',
     grass: '#5c4a42', grassDark: '#503f38', accent: '#7a5346',
+    contour: '#2a1c18', shadow: '#3f2c25', highlight: '#c07a54', haze: '#8a6a5c',
     ashen: true, emberSpecks: true, decoDensity: 0.1,
     resources: [
       { type: 'ore_coal', weight: 9 },

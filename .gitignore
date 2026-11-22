@@ -44,3 +44,11 @@ graphify-out/
 
 # regenerable test output (browser screenshots, review catalogs)
 tests/_artifacts/
+
+# desktop build output and installers
+release/
+build/*.ico
+build/*.icns
+
+# rust target if a Tauri shell is added later
+src-tauri/target/

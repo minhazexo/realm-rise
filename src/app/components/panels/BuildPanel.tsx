@@ -5,7 +5,7 @@ import GameState from '../../../game/core/GameState.ts';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
 import { getItem } from '../../../game/data/items.ts';
-import { countItem } from '../../../game/systems/InventorySystem.ts';
+import { countItem } from '../../../game/systems/combat/InventorySystem.ts';
 import { BUILDINGS, BUILDING_CATS, getBuildingDef } from '../../../game/data/buildings.ts';
 import { sceneCommand } from '../../../game/main.ts';
 import type { BuildingDef } from './types.ts';

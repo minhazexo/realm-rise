@@ -4,11 +4,11 @@ import GameState from '../core/GameState.ts';
 import { Bus, CH } from '../core/EventBus.ts';
 import { PLAYER_CONFIG, DIFFICULTY } from '../core/Constants.ts';
 import { getItem } from '../data/items.ts';
-import { wearEquipped, countItem, removeItem } from '../systems/InventorySystem.ts';
-import { shakeAllowed, shadowsEnabled, isImmortal, reducedMotion } from '../systems/SettingsSystem.ts';
-import { notifyPlayerHit } from '../systems/AutoAttackSystem.ts';
-import { resolveSpecial } from '../systems/WeaponSpecials.ts';
-import { applyBreathing } from '../systems/BreathingFX.ts';
+import { wearEquipped, countItem, removeItem } from '../systems/combat/InventorySystem.ts';
+import { shakeAllowed, shadowsEnabled, isImmortal, hasInfiniteEnergy, reducedMotion } from '../systems/environment/SettingsSystem.ts';
+import { notifyPlayerHit } from '../systems/combat/AutoAttackSystem.ts';
+import { resolveSpecial } from '../systems/combat/WeaponSpecials.ts';
+import { applyBreathing } from '../systems/environment/BreathingFX.ts';
 
 type Dir = 'down' | 'up' | 'left' | 'right';
 
@@ -107,6 +107,15 @@ export default class Player {
 
   update(dt: number, ctx: PlayerUpdateCtx): void {
     const S = GameState.s, D = S.player.derived || {};
+    // The player is only intentionally hidden during the death state. Recover
+    // visibility if a transient effect or stale scene state hides the actor.
+    if (!S.session_dead) {
+      if (!this.sprite.visible) this.sprite.setVisible(true);
+      if (this.sprite.alpha <= 0) this.sprite.setAlpha(1);
+      if (this.sprite.body && !(this.sprite.body as Phaser.Physics.Arcade.Body).enable) {
+        (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+      }
+    }
     // ── Hitstop: freeze game for a few frames on impactful hits ──────
     if (this.hitstopTimer > 0) {
       this.hitstopTimer -= dt;
@@ -134,8 +143,8 @@ export default class Player {
     this.cool.dodge = Math.max(0, this.cool.dodge - dt);
     if (this.wantDodge) {
       this.wantDodge = false;
-      if (this.cool.dodge <= 0 && S.player.stamina >= D.dodgeStamina * D.staminaCostMult) {
-        S.player.stamina -= D.dodgeStamina * D.staminaCostMult;
+      if (this.cool.dodge <= 0 && (hasInfiniteEnergy() || S.player.stamina >= D.dodgeStamina * D.staminaCostMult)) {
+        if (!hasInfiniteEnergy()) S.player.stamina -= D.dodgeStamina * D.staminaCostMult;
         this.regenDelay = PLAYER_CONFIG.staminaRegenDelaySec;
         this.iFrames = PLAYER_CONFIG.iFramesOnDodgeSec;
         this.cool.dodge = 0.8;
@@ -172,7 +181,7 @@ export default class Player {
       ((keys.SHIFT.isDown || bk.sprint?.isDown || ctx.mobileSprint === true)) && S.player.stamina > 4;
     if (sprinting) {
       speed *= D.sprintMult;
-      S.player.stamina -= 13 * D.staminaCostMult * dt;
+      if (!hasInfiniteEnergy()) S.player.stamina -= 13 * D.staminaCostMult * dt;
       this.regenDelay = PLAYER_CONFIG.staminaRegenDelaySec;
     }
     const k: number = 1 - Math.exp(-10 * dt);
@@ -181,7 +190,9 @@ export default class Player {
     b.velocity.y += (mv.y * speed - b.velocity.y) * k;
 
     this.regenDelay -= dt;
-    if (this.regenDelay <= 0 && !sprinting) {
+    if (hasInfiniteEnergy()) {
+      S.player.stamina = D.maxStamina;
+    } else if (this.regenDelay <= 0 && !sprinting) {
       S.player.stamina = Math.min(D.maxStamina, S.player.stamina + D.staminaRegen * dt);
     }
     // Mana regen (ARPG staff economy): slow, interruption-free pool so casting
@@ -288,7 +299,7 @@ export default class Player {
 
     const stam: number = ((opts.heavy ? PLAYER_CONFIG.heavyAttackStamina : PLAYER_CONFIG.lightAttackStamina) as number) * D.staminaCostMult;
     if (S.player.stamina < stam * 0.5) return;
-    S.player.stamina -= stam;
+    if (!hasInfiniteEnergy()) S.player.stamina -= stam;
     this.regenDelay = PLAYER_CONFIG.staminaRegenDelaySec;
     this.cool.attack = (wpn.cd / D.attackCdMult) * (opts.heavy ? 1.5 : 1);
 
@@ -475,7 +486,7 @@ export default class Player {
       (this.scene as any).fxHit?.(this.sprite.x, this.sprite.y - 20);
       (GameState.session as any).floatRenderer?.(this.sprite.x, this.sprite.y - 44, 'Parried!', '#8fd8ff', 1.2);
       Bus.emit('play-sound', 'parry');
-      GameState.notify('PLAYER');
+      GameState.notify(CH.PLAYER);
       return 0;
     }
     let dmg: number = rawDmg * (1 - D.damageReduction);
@@ -501,7 +512,7 @@ export default class Player {
     if (this.blocking && offDef?.shieldBlock) wearEquipped('offhand', 1, D.toolWearMult);
     else if (Math.random() < 0.35) wearEquipped('armor', 1, D.toolWearMult);
     if (shakeAllowed()) this.scene.cameras.main.shake(140, 0.005);
-    GameState.notify('PLAYER');
+    GameState.notify(CH.PLAYER);
     if (S.player.hp <= 0 && !isImmortal()) this.die();
     else if (isImmortal()) S.player.hp = Math.max(1, S.player.hp);
     return dmg;
@@ -514,10 +525,12 @@ export default class Player {
     // before calling die(), immortal mode prevents death outright.
     if (isImmortal()) {
       S.player.hp = Math.max(1, S.player.hp || 1);
-      GameState.notify('PLAYER');
+      GameState.notify(CH.PLAYER);
       return;
     }
     S.session_dead = true;
+    // Death must wake the UI: the DeathOverlay renders from session_dead.
+    GameState.notify(CH.SCREEN, CH.PLAYER);
     S.player.gold -= Math.floor(S.player.gold * 0.12);
     S.stats.deaths = (S.stats.deaths || 0) + 1;
     this.sprite.setVisible(false);
@@ -537,7 +550,7 @@ export default class Player {
     S.player.hunger = Math.max(28, S.player.hunger);
     S.player.thirst = Math.max(24, S.player.thirst);
     S.session_dead = false;
-    GameState.notify('PLAYER');
+    GameState.notify(CH.PLAYER);
   }
 
   /* ── Survival (spec §15: tension, not frustration) ───────────────────── */
@@ -559,8 +572,10 @@ export default class Player {
     if (S.player.hunger <= 0 && !isImmortal()) S.player.hp -= PLAYER_CONFIG.starveHpData * dt * chilled;
     if (S.player.thirst <= 0 && !isImmortal()) S.player.hp -= PLAYER_CONFIG.starveHpData * 1.35 * dt;
     if (S.player.hp <= 0 && !isImmortal()) this.die();
-    else if (!isImmortal()) GameState.notify('PLAYER');
-    else { S.player.hp = Math.max(1, S.player.hp); GameState.notify('PLAYER'); }
+    // No per-frame notify here: survival drains run every frame and the HUD
+    // refreshes on the 0.5s survival cadence (WorldScene.refreshSurvivalHud),
+    // so notifying here would re-render React 60×/s for nothing.
+    else if (isImmortal()) S.player.hp = Math.max(1, S.player.hp);
 
     function detached(n: number): number {
       return n / 100; // drain rates expressed per-second already; scale to 0..1
@@ -576,7 +591,7 @@ export default class Player {
     if (u.staminaFull) S.player.stamina = D.maxStamina;
     if (u.warmBuff) (this.scene as any).grantWarmth?.(u.warmBuff);
     if (u.repairEquipped != null || u.repairAll != null) {
-            import('../systems/InventorySystem.ts').then((m) => m.repairAll(u.repairAll ?? u.repairEquipped, D.perfectRepair));
+            import('../systems/combat/InventorySystem.ts').then((m) => m.repairAll(u.repairAll ?? u.repairEquipped, D.perfectRepair));
     }
   }
 }

@@ -47,7 +47,7 @@ const { SIDE_QUESTS } = await import('../src/game/data/questsSide.ts');
 const { SHARDS } = await import('../src/game/data/storyShards.ts');
 const { getItem } = await import('../src/game/data/items.ts');
 const { setWorldSeed, isWaterAt } = await import('../src/game/world/worldGen.ts');
-const { allPois } = await import('../src/game/systems/PoiRegistry.ts');
+const { allPois } = await import('../src/game/systems/world/PoiRegistry.ts');
 
 // The player's spawn — the one place the region MUST be safe and quiet.
 const SPAWN = { x: 0, y: 260 };
@@ -247,8 +247,8 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
 {
   const GameState = (await import('../src/game/core/GameState.ts')).default;
   GameState.newGame(20260922, { name: 'Ash', gender: 'f', personality: 'kind' }, 'normal');
-  const qe = await import('../src/game/systems/QuestEngine.ts');
-  const inv = await import('../src/game/systems/InventorySystem.ts');
+  const qe = await import('../src/game/systems/narrative/QuestEngine.ts');
+  const inv = await import('../src/game/systems/combat/InventorySystem.ts');
   const S = GameState.s;
   S.quests.sideActive = ['sq_echoes_of_ash'];
   const steps = [
@@ -351,9 +351,9 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
 // settlement forge feeds, so both share one rule and one UI.
 {
   const region = await import('../src/game/data/regionAshen.ts');
-  const build = await import('../src/game/systems/BuildSystem.ts');
-  const craft = await import('../src/game/systems/CraftingSystem.ts');
-  const inv = await import('../src/game/systems/InventorySystem.ts');
+  const build = await import('../src/game/systems/economy/BuildSystem.ts');
+  const craft = await import('../src/game/systems/combat/CraftingSystem.ts');
+  const inv = await import('../src/game/systems/combat/InventorySystem.ts');
   const GameState = (await import('../src/game/core/GameState.ts')).default;
   GameState.newGame(20260922, { name: 'Ash', gender: 'f', personality: 'kind' }, 'normal');
 
@@ -413,8 +413,8 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
 // only input: the layout math is pure (runs here in node, no Phaser), and a
 // second region is a data module plus one line in the registry.
 {
-  const layout = await import('../src/game/systems/RegionLayout.ts');
-  const registry = await import('../src/game/systems/RegionRegistry.ts');
+  const layout = await import('../src/game/systems/world/RegionLayout.ts');
+  const registry = await import('../src/game/systems/world/RegionRegistry.ts');
   const region = await import('../src/game/data/regionAshen.ts');
   const def = region.ASHEN_REGION;
 
@@ -424,7 +424,7 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
   ok(def.encounters === region.ASHEN_ENCOUNTERS && def.interactables === region.ASHEN_INTERACTABLES,
      'encounters and interactables come from the same authored lists');
   ok(def.subregionAt(SPAWN.x, SPAWN.y)?.id === 'village', "the def carries the region's own geometry helpers");
-  ok(registry.REGIONS.length === 1 && registry.REGIONS[0].id === def.id, 'the region is registered once');
+  ok(registry.REGIONS.filter((r) => r.id === def.id).length === 1, 'the region is registered exactly once');
 
   // Depth bands, pinned to the four-layer composition the brief asks for.
   const bgD = layout.propDepth({ tex: 't', dx: 0, dy: 0, band: 'bg' }, 120);
@@ -476,7 +476,9 @@ ok(!!getItem('emberforged_blade'), 'the unique reward item exists');
   ok(registry.regionStations().some((s) => s.station === 'forge'), "the registry publishes the region's stations");
   ok(registry.inRegionSafeZone(SPAWN.x, SPAWN.y) && !registry.inRegionSafeZone(760, -420),
      'the registry answers the safe zone the spawn director needs');
-  ok(registry.regionPois().length === region.ASHEN_POIS.length, 'the registry publishes the authored POIs');
+  const authoredPois = registry.REGIONS.reduce((n, r) => n + (r.pois?.length ?? 0), 0);
+  ok(registry.regionPois().length === authoredPois, 'the registry publishes every authored POI');
+  ok(registry.regionPois().some((p) => p.id === 'ashen_village'), "the Frontier's POIs are among them");
 }
 
 console.log(`ashen-frontier: ${passed} passed, ${failed} failed`);

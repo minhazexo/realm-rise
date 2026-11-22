@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import {
   screenFit, layerLocal, screenPoint, isDestroyed,
   addScreenOverlay, fitScreenLayer,
-} from '../src/game/systems/ScreenOverlays.ts';
+} from '../src/game/systems/environment/ScreenOverlays.ts';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } else console.log('✓ ' + m); };

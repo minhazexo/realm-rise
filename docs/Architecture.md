@@ -7,8 +7,8 @@
 > Rewritten 2026-09: the previous copy of this file was saved as UTF-16 with
 > null bytes and rendered unreadable in every editor. This version restores
 > the original content from the readable fragments and updates it to match
-> the current TypeScript codebase (systems are `.ts`, docs cross-links live
-> in `docs/improvements/`).
+> the current TypeScript codebase (systems are `.ts` under one folder per
+> concern; the doc index is `docs/README.md`).
 
 ---
 
@@ -44,33 +44,54 @@
 
 ## WorldScene Structure
 
-```
-WorldScene.create()
-  ├─ buildAllAssets(scene)          // generate all textures
-  ├─ Player(scene, x, y)            // create player sprite + physics
-  ├─ EnvSystem(scene)               // day/night, weather, survival drains
-  ├─ WaterSystem / PostFXSystem     // atmosphere + camera FX
-  ├─ setupInput()                   // keyboard + mouse bindings (InputSystem)
-  ├─ setupProjectiles() / setupLoot()
-  ├─ syncBuildingsFromState()       // render saved buildings
-  ├─ spawnWildNpcs()                // place NPCs at POIs
-  ├─ syncPoisMarkers()              // label discovered POIs
-  └─ refreshPlayerSkin()            // apply appearance to sprite
+The scene is a **coordinator**: it owns the display list, the cameras and the
+per-frame order, and everything listed below is a call into `systems/`. The
+order is the contract — reordering it changes gameplay, not just timing.
 
-WorldScene.update(time, delta)
-  ├─ env.update(dt)                        // weather, time, hunger/thirst
-  ├─ player.update(dt, input)              // movement, combat, survival
-  ├─ updateChunks()                        // stream in/out terrain
-  ├─ enemies[].update()                    // AI for nearby enemies
-  ├─ updateProjectiles(dt)                 // arrow/fireball movement
-  ├─ updateLoot(px, py)                    // auto-pickup nearby drops
-  ├─ updateGatherProximity(px, py)         // detect nearest gather node
-  ├─ updatePoiProximity(px, py)            // discover nearby POIs
-  ├─ updateNpcs(dt)                        // wander AI + depth sort
-  ├─ gatherTick(dt)                        // regrow depleted nodes
-  ├─ floats.update(dt)                     // floating text lifecycle
-  └─ updateMinimap(px, py)                 // draw tactical map (every 6th frame)
 ```
+WorldScene.create()                                  // one-time wiring, in order
+  ├─ buildAllAssets(scene)                           // generate every texture
+  ├─ configureSpawning({ Enemy, BossEnemy })         // inject entity constructors
+  ├─ camera bounds · depth layers · Player · recompute() derived stats
+  ├─ EnvSystem → create()                            // day/night, weather, drains
+  ├─ GrassField · WaterSystem · PostFXSystem → create()
+  ├─ createBossUI(scene)                             // boss bar state
+  ├─ setupInput() · setupProjectiles() · setupLoot()
+  ├─ syncBuildingsFromState() · spawnWildNpcs()
+  ├─ placeRegion(scene) · resetRegionTravel()        // the authored region
+  ├─ setAuthoredStations(regionStations())           // the hub's own stations
+  ├─ syncPoisMarkers() · refreshPlayerSkin() · refreshStationsNear()
+  ├─ timers: productionTick, autosave (rebuilt on 'settings-applied')
+  └─ Bus.on(level-up…) + 'shutdown' teardown (unsubscribes, chunk textures)
+
+WorldScene.update(_time, delta)                      // per-frame order
+  ├─ immortal guard · dt = min(0.05, delta/1000) · paused gate
+  ├─ env.update(dt)                                  // weather, time, hunger/thirst
+  ├─ player.update(dt, envContextInput())            // movement, combat, survival
+  ├─ autoAttackTick(scene, dt)                       // counter-swing assist
+  ├─ grassField.update(dt)
+  ├─ chunkStream.updateChunks(scene)                 // stream terrain in/out
+  ├─ dynamic lights (0.5 s) · followPlayerLights     // campfires, held torch
+  ├─ waterSystem.update · updateAmbientParticles · updateFogCards
+  ├─ tutorialTick (5 s) · 'player-pos' broadcast (30 Hz)
+  ├─ enemies[].update(dt) for the near ones · enemyRaidTick
+  ├─ raidTick (30 s) · session.inCombat
+  ├─ updateProjectiles(dt) · updateLoot(px, py)
+  ├─ updateGatherProximity(px, py) · updatePoiProximity(px, py)
+  ├─ updateRegion(scene, px, py, dt) · tickRegionTravel(px, py)
+  ├─ tickWorldEvents(scene, px, py, dt)              // scheduler → runtime
+  ├─ updateNpcs(dt, px, py) · gatherTick(dt)
+  ├─ building occlusion fade (10 Hz) · floats.update(dt)
+  ├─ updateMinimap(px, py) (10 Hz) · ambient biome audio (2 s)
+  ├─ refreshBossBar + save world.px/py (0.5 s)
+  ├─ applyCamZoom(dtMs) · fitScreenLayer(scene)      // zoom, then re-fit overlays
+  ├─ updateNightMask (15 Hz)                         // darkness-with-holes
+  ├─ refreshStationsNear · relightChunks · kingdomRefresh · raidResolveCheck (1 s)
+  └─ factionTick (60 s)                              // diplomacy drift
+```
+
+The cadences are written down because they are deliberate: a per-frame call for
+an 0.5-second job is the regression this list exists to catch.
 
 ## State Shape
 
@@ -111,20 +132,43 @@ GameState.session = {
 src/
 ├─ main.tsx                 // React entry, mounts App + Phaser
 ├─ styles.css               // All UI styles (glass panels, HUD, overlays)
+├─ global.d.ts              // window.riseGame / window.rise types
 ├─ app/
 │  ├─ App.tsx               // Top-level React shell, routes to components
-│  └─ components/           // HUD, Panels, Minimap, Toasts, …
+│  └─ components/           // the React surface, one folder per concern:
+│     ├─ hud/               // HUD, Toasts, TouchControls, DeathOverlay
+│     ├─ overlays/          // Overlays.tsx — dialogue, quest tracker, minimap,
+│     │                     // boss bar, zoom, first-steps hints
+│     ├─ panels/            // the panel files + index.ts, shared.tsx, types.ts
+│     ├─ screens/           // menu, creation, intro, how-to, credits, ruler
+│     ├─ debug/             // DebugPanel.tsx (dev-only)
+│     ├─ Panels.tsx         // the panel hub: frame + dispatch, nothing else
+│     └─ SettingsPanel.tsx  // the one settings surface
 ├─ game/
-│  ├─ main.ts               // Phaser config, setScreen(), startNewGame()
+│  ├─ main.ts               // Phaser config, setScreen(), startNewGame(),
+│  │                        // device-pixel ratio + visual profile
 │  ├─ core/                 // GameState, EventBus, Constants, BridgeSystem,
-│  │                        // Registry (strict data registries), stateFactory
+│  │                        // Registry, stateFactory, VisualProfile,
+│  │                        // validateContent
 │  ├─ entities/             // Player, Enemy, BossEnemy classes
-│  ├─ scenes/               // MenuScene, WorldScene
-│  ├─ systems/              // 30+ game systems (see docs/Systems.md)
+│  ├─ scenes/               // WorldScene (coordinator), MenuScene,
+│  │                        // menuBackdrop, chunkStreaming
+│  ├─ systems/              // ALL behaviour, grouped by concern:
+│  │  ├─ combat/            // entities, weapons, elements, loot, gathering,
+│  │  │                     // NPCs, progression, inventory, crafting
+│  │  ├─ world/             // streaming, POIs, regions, world events, raids,
+│  │  │                     // kingdom sim, navigation, ambient nature
+│  │  ├─ narrative/         // quests, story, shards, achievements, voices,
+│  │  │                     // tutorial, legacy store
+│  │  ├─ economy/           // building, kingdom, factions, regional prices
+│  │  ├─ environment/       // input, camera, settings, env/weather, lighting,
+│  │  │                     // post FX, overlays, minimap, feel
+│  │  ├─ audio/             // AudioSystem, audioSfx, ambientSounds
+│  │  └─ persistence/       // SaveSystem
 │  ├─ data/                 // Items, recipes, quests, enemies, NPCs,
-│  │                        // buildings, skills, factions, loot tables
+│  │                        // buildings, skills, factions, loot tables, region*
 │  ├─ assets/               // Procedural art: textures, sprites, icons, sheets
-│  └─ world/                // World gen, biomes, chunk painter, node types
+│  └─ world/                // World gen, biomes, chunk painter + fog, map render
 ├─ hooks/
 │  └─ useGameState.ts       // React ↔ GameState bridge hook
 └─ utils/
@@ -133,14 +177,15 @@ src/
 
 ## Key conventions
 
-- **Systems are Phaser-free** where possible: `systems/*.ts` take the scene as
-  an argument ("scene-context functions"). Entity classes are *injected* into
-  `EntityFactory`/`SpawnDirector` so node tests can stub them.
+- **Systems are Phaser-free** where possible: `systems/<concern>/*.ts` take the
+  scene as an argument ("scene-context functions"). Entity classes are
+  *injected* into `EntityFactory`/`SpawnDirector` so node tests can stub them.
 - **Balance values live in `core/Constants.ts`** (spec §79–80).
 - **Strict registries** (`core/Registry.ts`): duplicate data keys throw at
   load instead of silently overwriting.
 - **Settings discipline**: only `SettingsSystem.applySettings()` touches
   DOM/audio side-effects; consumers read via `getSetting()` helpers.
-- Docs: feature status in `docs/Features.md`, systems reference in
-  `docs/Systems.md`, known issues in `docs/TODOs.md`, quality audits and
-  ongoing passes in `docs/improvements/`.
+- Docs: `docs/README.md` is the index. The file map is `docs/STRUCTURE.md`
+  (`tests/structure.mjs` reads it and fails when it goes stale), the runtime
+  flow is this file, the build order and its status are `docs/ROADMAP.md`, and
+  `docs/AI_RULES.md` is mandatory reading before a change.

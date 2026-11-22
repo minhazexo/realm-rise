@@ -39,7 +39,7 @@ export default class MenuScene extends Phaser.Scene {
     buildMenuBackdrop(this);
 
     // Title handled by React; start ambient menu music.
-    import('../systems/AudioSystem.ts').then((a) => a.setMenuMood());
+    import('../systems/audio/AudioSystem.ts').then((a) => a.setMenuMood());
     GameState.session.screen = 'menu';
     GameState.notify(CH.SCREEN);
   }

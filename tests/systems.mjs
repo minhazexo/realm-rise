@@ -1,23 +1,23 @@
 // Integration smoke test: full systems round-trip without Phaser.
 import GameState from '../src/game/core/GameState.ts';
-import { recompute, awardXP, learnSkill } from '../src/game/systems/ProgressionSystem.ts';
-import * as Inv from '../src/game/systems/InventorySystem.ts';
-import { craft } from '../src/game/systems/CraftingSystem.ts';
-import { handleEvent, currentMainQuest } from '../src/game/systems/QuestEngine.ts';
-import { completeQuest, setFlag, offerSideQuest } from '../src/game/systems/QuestSystem.ts';
-import { refresh as kingdomRefresh, recruitCitizen, stageRequirementsMissing } from '../src/game/systems/KingdomSystem.ts';
-import { productionTick, claimOverflow } from '../src/game/systems/KingdomEconomy.ts';
-import { adjustRel, relOf } from '../src/game/systems/FactionSystem.ts';
-import { buyPrice, sellPrice, makeContext } from '../src/game/systems/EconomySystem.ts';
-import { serialize } from '../src/game/systems/SaveSystem.ts';
-import { firstSteps, earlyWinTick, welcomeBackText } from '../src/game/systems/TutorialSystem.ts';
-import * as Loot from '../src/game/systems/LootSystem.ts';
-import * as Build from '../src/game/systems/BuildSystem.ts';
-import * as Spawn from '../src/game/systems/SpawnDirector.ts';
+import { recompute, awardXP, learnSkill } from '../src/game/systems/combat/ProgressionSystem.ts';
+import * as Inv from '../src/game/systems/combat/InventorySystem.ts';
+import { craft } from '../src/game/systems/combat/CraftingSystem.ts';
+import { handleEvent, currentMainQuest } from '../src/game/systems/narrative/QuestEngine.ts';
+import { completeQuest, setFlag, offerSideQuest } from '../src/game/systems/narrative/QuestSystem.ts';
+import { refresh as kingdomRefresh, recruitCitizen, stageRequirementsMissing } from '../src/game/systems/economy/KingdomSystem.ts';
+import { productionTick, claimOverflow } from '../src/game/systems/world/KingdomEconomy.ts';
+import { adjustRel, relOf } from '../src/game/systems/economy/FactionSystem.ts';
+import { buyPrice, sellPrice, makeContext } from '../src/game/systems/economy/EconomySystem.ts';
+import { serialize } from '../src/game/systems/persistence/SaveSystem.ts';
+import { firstSteps, earlyWinTick, welcomeBackText } from '../src/game/systems/narrative/TutorialSystem.ts';
+import * as Loot from '../src/game/systems/combat/LootSystem.ts';
+import * as Build from '../src/game/systems/economy/BuildSystem.ts';
+import * as Spawn from '../src/game/systems/world/SpawnDirector.ts';
 import { ELITE_FOR_BASE } from '../src/game/data/elites.ts';
-import * as Factory from '../src/game/systems/EntityFactory.ts';
-import * as Econ from '../src/game/systems/EconomySystem.ts';
-import { healToFull } from '../src/game/systems/ProgressionXP.ts';
+import * as Factory from '../src/game/systems/combat/EntityFactory.ts';
+import * as Econ from '../src/game/systems/economy/EconomySystem.ts';
+import { healToFull } from '../src/game/systems/combat/ProgressionXP.ts';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } };
@@ -281,7 +281,7 @@ healToFull();
 ok(S().player.hp === S().player.derived.maxHp, 'healToFull restores max HP');
 
 // Session-only navigation: coordinates, bearings, arrival and save isolation.
-const Nav = await import('../src/game/systems/NavigationSystem.ts');
+const Nav = await import('../src/game/systems/world/NavigationSystem.ts');
 const { Bus, CH } = await import('../src/game/core/EventBus.ts');
 const { WORLD_CONFIG } = await import('../src/game/core/Constants.ts');
 S().world.px = 0; S().world.py = 0;

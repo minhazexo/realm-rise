@@ -48,7 +48,7 @@ try {
     buildItemIcons(scene);
     if (iconDataURLs.axe_iron !== firstURL) failures.push('idempotence');
     const { default: state } = await import('/src/game/core/GameState.ts');
-    const { addItem } = await import('/src/game/systems/InventorySystem.ts');
+    const { addItem } = await import('/src/game/systems/combat/InventorySystem.ts');
     for (const id of ['axe_stone', 'axe_iron', 'axe_steel', 'iron_sword', 'short_bow', 'healing_salve', 'raw_fish']) addItem(id, 1);
     state.session.uiPanel = 'inventory';
     state.session.paused = true;

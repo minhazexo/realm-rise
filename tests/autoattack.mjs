@@ -4,8 +4,8 @@ import assert from 'node:assert/strict';
 import GameState from '../src/game/core/GameState.ts';
 import {
   autoAttackTick, pickTarget, scoreTarget, notifyPlayerHit, autoAttackEnabled
-} from '../src/game/systems/AutoAttackSystem.ts';
-import { updateSettings } from '../src/game/systems/SettingsSystem.ts';
+} from '../src/game/systems/combat/AutoAttackSystem.ts';
+import { updateSettings } from '../src/game/systems/environment/SettingsSystem.ts';
 
 let passed = 0, failed = 0;
 const ok = (c, m) => { if (c) { passed++; } else { failed++; console.error('✗ ' + m); } };

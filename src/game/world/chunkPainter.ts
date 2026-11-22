@@ -14,6 +14,7 @@
 // so chunk canvases are fully deterministic given the world seed.
 // ─────────────────────────────────────────────────────────────────────────────
 import { WORLD_CONFIG } from '../core/Constants.ts';
+import { terrainScale } from '../core/VisualProfile.ts';
 import { elevationAt, moistureAt, isWaterAt, biomeAt, RIVER_LEVEL } from './worldGen.ts';
 import { BIOMES } from './biomeTable.ts';
 import type { BiomeEntry } from './biomeTable.ts';
@@ -43,13 +44,6 @@ const SHORE_FRINGE = 0.075;
 const DEEP_WATER = 0.055;
 /** Shore edge for sandy fringe detection. */
 const SHORE_EDGE = 0.02;
-
-// ── Atmospheric fog ─────────────────────────────────────────────────────────
-// World-space distance (in chunks) at which the chunk starts fading into
-// the biome's "fog colour". This gives a sense of depth — distant terrain
-// melts into the horizon haze instead of tiling forever.
-const FOG_START_CHUNKS = 5;
-const FOG_END_CHUNKS   = 9;
 
 // ── LRU cache ───────────────────────────────────────────────────────────────
 
@@ -127,6 +121,34 @@ function roundBlob(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
   ctx.closePath();
 }
 
+/**
+ * Begin an ORGANIC closed blob path (painterly pass, docs/ART-DIRECTION.md).
+ * A quadratic curve through jittered points reads as hand-painted rather than
+ * geometric. Deterministic via the same hash-based `rand()` as the rest of the
+ * painter, so chunk output stays byte-identical for a given seed.
+ */
+function softBlob(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, seedA: number, seedB: number): void {
+  const lobes = 9;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i < lobes; i++) {
+    const a = (i / lobes) * Math.PI * 2;
+    const j = 1 + (rand(seedA + i * 7.13, seedB + i * 3.71) - 0.5) * 0.34;
+    pts.push([x + Math.cos(a) * r * j, y + Math.sin(a) * r * j]);
+  }
+  const mid = (p: [number, number], q: [number, number]): [number, number] =>
+    [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  const start: [number, number] = mid(pts[lobes - 1]!, pts[0]!);
+  ctx.beginPath();
+  ctx.moveTo(start[0], start[1]);
+  for (let i = 0; i < lobes; i++) {
+    const c: [number, number] = pts[i]!;
+    const n: [number, number] = pts[(i + 1) % lobes]!;
+    const m: [number, number] = mid(c, n);
+    ctx.quadraticCurveTo(c[0], c[1], m[0], m[1]);
+  }
+  ctx.closePath();
+}
+
 // ── Main chunk painter ──────────────────────────────────────────────────────
 
 /**
@@ -142,15 +164,28 @@ function roundBlob(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
 export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
   const key = `${cx},${cy}`;
   let c: HTMLCanvasElement | undefined = cache.get(key);
-  if (c) return c;
+  if (c) {
+    // Map insertion order is our LRU order. Refresh the hit so hot chunks
+    // survive longer than chunks that were merely streamed through.
+    cache.delete(key);
+    cache.set(key, c);
+    return c;
+  }
 
   const size: number = CHUNK_PX();
+  // Paint at the profile's TERRAIN scale and display the chunk at world size
+  // (docs/ART-DIRECTION.md §Source resolution). Terrain has its own knob because
+  // a chunk canvas is resident per live chunk: see core/VisualProfile.terrainScale
+  // for the memory arithmetic behind the number. Every coordinate below stays in
+  // native chunk px.
+  const scale: number = Math.max(1, Math.round(terrainScale()));
   c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
+  c.width = size * scale;
+  c.height = size * scale;
   const ctx = c.getContext('2d') as CanvasRenderingContext2D;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  if (scale !== 1) ctx.scale(scale, scale);
 
   const originX = cx * size;
   const originY = cy * size;
@@ -161,19 +196,33 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
   // A flat base with soft large blobs breaks tiling and reads better at 1080p.
   ctx.fillStyle = biome.grass;
   ctx.fillRect(0, 0, size, size);
-  // Macro variation: large soft blobs in grassDark/accent for broad tonal sweep.
-  for (let i = 0; i < 14; i++) {
+  // Macro variation: a few broad, low-contrast blobs soften the 512px tile
+  // boundary without becoming visible landmarks of their own.
+  for (let i = 0; i < 3; i++) {
     const mx = rand(originX + i * 101.3, originY + i * 57.7) * size;
     const my = rand(originY + i * 131.7, originX + i * 43.1) * size;
-    const mr = 55 + rand(mx, my) * 80;
-    // Alternate dark/accent/slightly-lighter for more tonal variety
-    const tint = i % 3 === 0 ? biome.grassDark : i % 3 === 1 ? biome.accent : shadeHex(biome.grass, i % 2 ? 0.92 : 1.06);
-    ctx.globalAlpha = 0.06 + rand(mx + 9, my + 3) * 0.07;
+    const mr = 105 + rand(mx, my) * 95;
+    const tint = i % 2 === 0 ? biome.grassDark : biome.accent;
+    ctx.globalAlpha = 0.035 + rand(mx + 9, my + 3) * 0.04;
     ctx.fillStyle = tint;
-    roundBlob(ctx, mx, my, mr);
+    softBlob(ctx, mx, my, mr, mx, my);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+
+  // ── 1a. Painterly light wash ───────────────────────────────────────
+  // A soft directional gradient (cool light upper-left → warm haze lower-right)
+  // gives the ground painted depth. Kept very low alpha so it never fights the
+  // gameplay layer for contrast (ART-DIRECTION §6).
+  if (biome.highlight || biome.haze) {
+    const wash = ctx.createLinearGradient(0, 0, size, size);
+    wash.addColorStop(0, biome.highlight || biome.accent);
+    wash.addColorStop(1, biome.haze || biome.grassDark);
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalAlpha = 1;
+  }
 
   // ── 1b. Biome edge blending (Phase B) ──────────────────────────────
   // Sample 8 points on a ring around the chunk; where a neighbor differs,
@@ -238,12 +287,12 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
       if (m > BLOTCH_ACCENT_MIN) {
         ctx.globalAlpha = 0.25 + (m - BLOTCH_ACCENT_MIN) * 1.2;
         ctx.fillStyle = biome.accent;
-        roundBlob(ctx, x + rx * 28, y + ry * 28, 22 + m * 20);
+        softBlob(ctx, x + rx * 28, y + ry * 28, 22 + m * 20, originX + x, originY + y);
         ctx.fill();
       } else if (m < BLOTCH_DARK_MAX) {
         ctx.globalAlpha = 0.2 + (BLOTCH_DARK_MAX - m) * 1.5;
         ctx.fillStyle = biome.grassDark;
-        roundBlob(ctx, x + rx * 30, y + ry * 30, 18 + (1 - m) * 18);
+        softBlob(ctx, x + rx * 30, y + ry * 30, 18 + (1 - m) * 18, originY + y, originX + x);
         ctx.fill();
       }
     }
@@ -395,7 +444,7 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
     if (isWaterAt(originX + dxp, originY + dyp)) continue;
     ctx.globalAlpha = 0.08 + rand(dxp + 7, dyp + 7) * 0.09;
     ctx.fillStyle = biome.sandy ? shadeHex(biome.grassDark, 1.05) : '#7a6a4f';
-    roundBlob(ctx, dxp, dyp, 6 + rand(dxp, dyp) * 22);
+    softBlob(ctx, dxp, dyp, 6 + rand(dxp, dyp) * 22, dxp, dyp);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -616,132 +665,15 @@ export function getChunkCanvas(cx: number, cy: number): HTMLCanvasElement {
   return c;
 }
 
-/** Atmosphere state consumed by {@link setAtmosphereState}. */
-export interface AtmosphereState {
-  timeOfDay?: number;
-  weather?: string;
-}
-
-/**
- * Atmospheric perspective: lerp the chunk canvas toward a biome-tinted
- * haze colour based on distance from the camera. Closer chunks are
- * unmodified; distant chunks fade smoothly into the horizon colour so the
- * world has real depth instead of tiling to infinity.
- *
- * Called from WorldScene after each chunk is drawn onto the layer.
- * Cheap: a single multiplicative compositing pass per active chunk per
- * resize event (not per frame).
- *
- * @param canvas  Chunk canvas produced by getChunkCanvas().
- * @param dx  World-space distance from camera centre to chunk centre (px).
- * @param dy  Unused — keep for symmetry with future 2D-distance fog.
- */
-export function applyFogToChunk(canvas: HTMLCanvasElement, dx: number, dy: number): void {
-  if (!canvas) return;
-  if (foggedForBucket.has(canvas)) return;
-  const size = canvas.width;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  // Skip fog overlay if the user disabled it or performance is critical.
-  if (!shouldApplyFog()) return;
-  const distChunks = Math.abs(dx) / size;
-  const t = Math.max(0, Math.min(1,
-    (distChunks - FOG_START_CHUNKS) / (FOG_END_CHUNKS - FOG_START_CHUNKS),
-  ));
-  if (t <= 0) return;
-  const fogColor = getFogColor();
-  // Multiply-blend the fog over the chunk. This preserves the chunk's
-  // texture detail while tinting toward the horizon colour.
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = t * 0.45; // up to 45% fog tint at the far edge
-  ctx.fillStyle = fogColor;
-  ctx.fillRect(0, 0, size, size);
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 1;
-  foggedForBucket.add(canvas);
-}
-
-// Module-level toggle (the settings system drives this).
-let _fogEnabled = true;
-export function setFogEnabled(on: boolean): void { _fogEnabled = on; }
-function shouldApplyFog(): boolean { return _fogEnabled; }
-
-// Track whether the fog params changed enough to invalidate the cache.
-// We re-bake fog only when timeOfDay or weather crosses a threshold.
-let _fogSnapshot = '';
-let _fogDirty = true;
-export function isFogDirty(): boolean { return _fogDirty; }
-export function clearFogDirty(): void { _fogDirty = false; }
-
-// Time-of-day + weather tint for the horizon haze. Updated each frame
-// from WorldScene via setAtmosphereState().
-let _fogBaseColor = '#a9b8c8';
-let _fogTimeOfDay = 0.5;
-let _fogWeather = 'clear';
-const _fogBiomeTints: Record<string, string> = {
-  plains:   '#8aa872',
-  forest:   '#6c8862',
-  swamp:    '#586e54',
-  mountains:'#8e929b',
-  desert:   '#c2a575',
-  frozen:   '#c4d0db',
-  volcanic: '#7e5a4a',
-};
-/** Tracks canvases already fogged for the current bucket (avoids double-darken). */
-const foggedForBucket = new WeakSet<HTMLCanvasElement>();
-export function setAtmosphereState({ timeOfDay, weather }: AtmosphereState): void {
-  if (typeof timeOfDay === 'number') _fogTimeOfDay = timeOfDay;
-  if (weather) _fogWeather = weather;
-  // Bucket time-of-day to 12 buckets per day — re-bake fog only at bucket change.
-  const bucket = Math.floor(_fogTimeOfDay * 12) + ':' + _fogWeather;
-  if (bucket !== _fogSnapshot) {
-    _fogSnapshot = bucket;
-    _fogDirty = true;
-    // NOTE: no longer cache.clear() — that caused a full rebake hitch every
-    // bucket change. New chunks pick up the new fog; existing chunks keep
-    // their baked fog until naturally evicted.
-  }
-}
-export function setFogBiomeTint(biomeId: string, color: string): void {
-  if (biomeId && color) _fogBiomeTints[biomeId] = color;
-}
-
-/**
- * Compute the current fog colour based on time-of-day + weather + the
- * last-set biome tint. Called per-frame in WorldScene so the horizon
- * matches the sky.
- */
-export function getFogColor(): string {
-  const t = _fogTimeOfDay;
-  const isNight = t > 0.78 || t < 0.24;
-  const biomeBase = _fogBiomeTints[_lastFogBiome] || '#a9b8c8';
-  const r0 = parseInt(biomeBase.slice(1, 3), 16);
-  const g0 = parseInt(biomeBase.slice(3, 5), 16);
-  const b0 = parseInt(biomeBase.slice(5, 7), 16);
-  let r = r0, g = g0, b = b0;
-  if (isNight) {
-    r = Math.round(r0 * 0.4 + 18);
-    g = Math.round(g0 * 0.4 + 22);
-    b = Math.round(b0 * 0.6 + 60);
-  } else if (t > 0.22 && t < 0.32) {
-    r = Math.round(r0 * 0.7 + 200);
-    g = Math.round(g0 * 0.7 + 130);
-    b = Math.round(b0 * 0.7 + 90);
-  } else if (t > 0.74 && t < 0.82) {
-    r = Math.round(r0 * 0.7 + 200);
-    g = Math.round(g0 * 0.7 + 100);
-    b = Math.round(b0 * 0.7 + 60);
-  }
-  if (_fogWeather === 'storm') { r = Math.round(r * 0.6); g = Math.round(g * 0.65); b = Math.round(b * 0.75); }
-  if (_fogWeather === 'fog' || _fogWeather === 'drizzle') {
-    r = Math.round(r * 0.85 + 140);
-    g = Math.round(g * 0.85 + 140);
-    b = Math.round(b * 0.85 + 150);
-  }
-  return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-}
-let _lastFogBiome = 'plains';
-export function setLastFogBiome(id: string): void { if (id) _lastFogBiome = id; }
+/* ── Atmospheric fog ─────────────────────────────────────────────────────────
+   Extracted to ./chunkFog.ts to keep this file within its size budget
+   (tests/structure.mjs). Re-exported so existing importers are unchanged. */
+export {
+  applyFogToChunk, getFogBakeParams, getFogBakeColor, setFogEnabled,
+  isFogDirty, clearFogDirty, fogSnapshot, setAtmosphereState,
+  setFogBiomeTint, getFogColor, setLastFogBiome,
+} from './chunkFog.ts';
+export type { AtmosphereState, FogBakeParams } from './chunkFog.ts';
 
 // ── Cache management ────────────────────────────────────────────────────────
 

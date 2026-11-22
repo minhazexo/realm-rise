@@ -13,61 +13,76 @@ import GameState from '../core/GameState.ts';
 import { Bus, CH } from '../core/EventBus.ts';
 import { WORLD_CONFIG, SETTLEMENT_CONFIG, GATHER_CONFIG, DIFFICULTY } from '../core/Constants.ts';
 import { setWorldSeed, biomeAt } from '../world/worldGen.ts';
-import { allPois } from '../systems/PoiRegistry.ts';
-import { getChunkCanvas, evictFarChunks } from '../world/chunkPainter.ts';
+import { allPois } from '../systems/world/PoiRegistry.ts';
 import Player from '../entities/Player.ts';
 import Enemy from '../entities/Enemy.ts';
 import BossEnemy from '../entities/BossEnemy.ts';
-import EnvSystem from '../systems/EnvSystem.ts';
+import {
+  setAtmosphereState, setFogEnabled, setLastFogBiome
+} from '../world/chunkPainter.ts';
+import EnvSystem from '../systems/environment/EnvSystem.ts';
 import { buildAllAssets } from '../assets/index.ts';
-import { preloadItemArtwork } from '../assets/itemArtwork.ts';
-import { recompute, awardXP, profXP, addReputation } from '../systems/ProgressionSystem.ts';
-import { addItem } from '../systems/InventorySystem.ts';
-import { refresh as kingdomRefresh, recruitCitizen } from '../systems/KingdomSystem.ts';
-import { productionTick } from '../systems/KingdomEconomy.ts';
+import { loadItemArtwork } from '../assets/itemArtwork.ts';
+import { recompute, awardXP, profXP, addReputation } from '../systems/combat/ProgressionSystem.ts';
+import { addItem } from '../systems/combat/InventorySystem.ts';
+import { refresh as kingdomRefresh, recruitCitizen } from '../systems/economy/KingdomSystem.ts';
+import { productionTick } from '../systems/world/KingdomEconomy.ts';
 import { getBuildingDef } from '../data/buildings.ts';
 import { getNpcDef, npcLines } from '../data/npcs.ts';
-import { saveToSlot } from '../systems/SaveSystem.ts';
-import { getSetting } from '../systems/SettingsSystem.ts';
+import { saveToSlot } from '../systems/persistence/SaveSystem.ts';
+import { getSetting } from '../systems/environment/SettingsSystem.ts';
 import { getItem } from '../data/items.ts';
 import { makePlayerSheet } from '../assets/index.ts';
-import WaterSystem from '../systems/WaterSystem.ts';
-import PostFXSystem from '../systems/PostFXSystem.ts';
-import {
-  applyFogToChunk, setAtmosphereState, setFogEnabled, setLastFogBiome
-} from '../world/chunkPainter.ts';
-import { refreshDynamicLights, followPlayerLights } from '../systems/DynamicLights.ts';
-import { placeRegion, updateRegion, regionSnapshot } from '../systems/RegionSystem.ts';
-import { tickWorldEvents, worldEventSnapshot } from '../systems/WorldEventRuntime.ts';
-import { regionStations } from '../systems/RegionRegistry.ts';
+import WaterSystem from '../systems/world/WaterSystem.ts';
+import PostFXSystem from '../systems/environment/PostFXSystem.ts';
+import { refreshDynamicLights, followPlayerLights, clearDynamicLights } from '../systems/environment/DynamicLights.ts';
+import { placeRegion, updateRegion, regionSnapshot } from '../systems/world/RegionSystem.ts';
+import { fastTravel, resetRegionTravel, tickRegionTravel } from '../systems/world/RegionTravel.ts';
+import { tickWorldEvents, worldEventSnapshot } from '../systems/world/WorldEventRuntime.ts';
+import { regionStations } from '../systems/world/RegionRegistry.ts';
 
-import * as lootSys from '../systems/LootSystem.ts';
-import * as npcSys from '../systems/NpcSystem.ts';
-import * as projSys from '../systems/ProjectileSystem.ts';
-import * as bossSys from '../systems/BossUISystem.ts';
-import * as buildSys from '../systems/BuildSystem.ts';
-import * as minimapSys from '../systems/MinimapSystem.ts';
-import * as inputSys from '../systems/InputSystem.ts';
-import * as camSys from '../systems/CameraSystem.ts';
-import { createNpc } from '../systems/EntityFactory.ts';
+import * as lootSys from '../systems/combat/LootSystem.ts';
+import * as npcSys from '../systems/combat/NpcSystem.ts';
+import * as projSys from '../systems/combat/ProjectileSystem.ts';
+import * as bossSys from '../systems/combat/BossUISystem.ts';
+import * as buildSys from '../systems/economy/BuildSystem.ts';
+import * as minimapSys from '../systems/environment/MinimapSystem.ts';
+import * as inputSys from '../systems/environment/InputSystem.ts';
+import * as camSys from '../systems/environment/CameraSystem.ts';
+import { createNpc } from '../systems/combat/EntityFactory.ts';
 import { CHEST_POOLS, FALLBACK_CHEST_POOL } from '../data/lootTables.ts';
-import { configureSpawning } from '../systems/SpawnDirector.ts';
-import * as spawnSys from '../systems/SpawnDirector.ts';
-import * as gatherSys from '../systems/GatherSystem.ts';
-import { updateNightMask } from '../systems/NightLights.ts';
-import { fitScreenLayer } from '../systems/ScreenOverlays.ts';
-import { updateFogCards } from '../systems/FogCards.ts';
-import { updateAmbientParticles, destroyAmbientParticles } from '../systems/AmbientParticles.ts';
-import { levelUpCeremony } from '../systems/CelebrationFX.ts';
-import { autoAttackTick } from '../systems/AutoAttackSystem.ts';
-import GrassField from '../systems/GrassField.ts';
+import { configureSpawning } from '../systems/world/SpawnDirector.ts';
+import * as spawnSys from '../systems/world/SpawnDirector.ts';
+import * as gatherSys from '../systems/combat/GatherSystem.ts';
+import { updateNightMask } from '../systems/environment/NightLights.ts';
+import { fitScreenLayer } from '../systems/environment/ScreenOverlays.ts';
+import { updateFogCards } from '../systems/world/FogCards.ts';
+import { updateAmbientParticles, destroyAmbientParticles } from '../systems/world/AmbientParticles.ts';
+import * as chunkStream from './chunkStreaming.ts';
+import { levelUpCeremony } from '../systems/environment/CelebrationFX.ts';
+import { autoAttackTick } from '../systems/combat/AutoAttackSystem.ts';
+import GrassField from '../systems/world/GrassField.ts';
 
 export const AUTOSAVE_INTERVAL_MS: number = 100000;
+/**
+ * Enemies inside this radius simulate. Sized to cover the viewport at 1080p
+ * with room for a chase that starts just off-screen; beyond it an enemy is
+ * scenery, and its AI (pathing, attack timers, perception) is not run.
+ */
+export const ENEMY_ACTIVE_RADIUS = 1250;
 
 export default class WorldScene extends Phaser.Scene {
   activeChunks: Map<string, Phaser.GameObjects.Image>;
+  /** Chunk-streaming working sets — owned by chunkStreaming.ts (public so the module can drive them). */
+  pendingChunkQueue: Array<{ cx: number; cy: number; key: string }> = [];
+  pendingChunkKeys = new Set<string>();
+  fogRefreshQueue: string[] = [];
+  fogRefreshKeys = new Set<string>();
+  _fogSweepSnapshot = '';
   lastPcx: number;
   lastPcy: number;
+  /** Viewport-derived chunk radius; chunkStreaming recomputes it per frame. */
+  lastChunkRadius = -1;
   nodes: Map<any, any>;
   enemies: any[];
   npcs: any[];
@@ -77,7 +92,22 @@ export default class WorldScene extends Phaser.Scene {
   needReskin: boolean;
   _frame: number;
   saveAcc: number;
-  chunkGroup!: Phaser.GameObjects.Group;
+  /** dt accumulators so cadences are seconds, not frames (30/144Hz agree). */
+  private _accLights = 0;
+  private _accTutorial = 0;
+  private _accPos = 0;
+  private _accRaid = 0;
+  private _accOcc = 0;
+  private _accMinimap = 0;
+  private _accAmbient = 0;
+  private _accBoss = 0;
+  /** Tracks whether a raid party was active, to emit raid-resolved when it ends. */
+  private _hadRaiders = false;
+  private _accMask = 0;
+  private _accStations = 0;
+  private _accFaction = 0;
+  /** Dedicated ground display layer: terrain never participates in actor y-sorting. */
+  groundLayer!: Phaser.GameObjects.Layer;
   floats!: Floater;
   poiMarkerLayer!: Phaser.GameObjects.Layer;
   buildingLayer!: Phaser.GameObjects.Layer;
@@ -113,13 +143,15 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   preload(): void {
-    preloadItemArtwork(this);
+    // Item icons are cosmetic and load in the background from create(); the
+    // scene loader must stay empty so world entry never waits on 41 PNGs.
   }
 
   create(): void {
     const S = GameState.s;
     setWorldSeed(S.meta.seed);
     buildAllAssets(this);
+    loadItemArtwork(this);
 
     this.physics.world.setBounds(-WORLD_CONFIG.worldHalfExtent, -WORLD_CONFIG.worldHalfExtent, WORLD_CONFIG.worldHalfExtent * 2, WORLD_CONFIG.worldHalfExtent * 2);
     // SpawnDirector needs the entity constructors (injected so systems/
@@ -130,12 +162,20 @@ export default class WorldScene extends Phaser.Scene {
     // Ensure camera rounds pixel positions to avoid sub-pixel blur on pixel art
     this.cameras.main.roundPixels = true;
 
-    this.chunkGroup = this.add.group();
+    // Phaser sorts GameObjects by depth. Keep all procedural ground inside a
+    // dedicated Layer at the absolute back of the world so streamed chunks
+    // cannot jump above actors merely because they were created later.
+    this.groundLayer = this.add.layer();
+    this.groundLayer.setDepth(-WORLD_CONFIG.worldHalfExtent * 2);
     this.floats = new Floater(this);
     this.poiMarkerLayer = this.add.layer();
     this.buildingLayer = this.add.layer();
 
     this.player = new Player(this, S.world.px ?? 0, S.world.py ?? 260);
+    // The world has bounds; without this the hero walks into the void past
+    // ±16384 and the camera stops following a body that is no longer in frame.
+    // The sprite is a physics body by the time the constructor returns.
+    try { this.player.sprite.setCollideWorldBounds(true); } catch { /* body not ready in tests */ }
     recompute();
     const D = S.player.derived!;
     S.player.hp = S.player.hp || D.maxHp;
@@ -172,7 +212,7 @@ export default class WorldScene extends Phaser.Scene {
       weather: GameState.s?.world?.activeWeather || 'clear'
     });
     // Switch from menu lullaby to world ambience — soothing explore/day music.
-        import('../systems/AudioSystem.ts').then((a: any) => {
+        import('../systems/audio/AudioSystem.ts').then((a: any) => {
       try {
         const ph = (GameState.session as any).timePhase;
         a.setMood(ph === 'day' || ph === 'night' ? ph : 'explore');
@@ -191,6 +231,10 @@ export default class WorldScene extends Phaser.Scene {
     // Authored region (THE ASHEN FRONTIER): structural collision + state.
     // Content streams in lazily as the player explores (RegionSystem).
     placeRegion(this);
+    // Region travel starts fresh per world: the region the player spawns in is
+    // announced (and its waypoint unlocked) on the first update, not from a
+    // previous run's memory.
+    resetRegionTravel();
     // The region's own crafting stations (the hub anvil). Registered once so
     // they go through the same proximity rule as settlement buildings.
     buildSys.setAuthoredStations(regionStations());
@@ -227,11 +271,21 @@ export default class WorldScene extends Phaser.Scene {
     this._offLevelUp = Bus.on('level-up', (p: any) => {
       try { levelUpCeremony(this, Number(p?.level) || 1); } catch { /* cosmetic */ }
     });
-    // Full scene-shutdown cleanup: bus listeners + grass overlay.
+    // Full scene-shutdown cleanup: bus listeners + overlays + FX systems.
     this.events.once('shutdown', () => {
       try { this._offLevelUp?.(); } catch { /* ignore */ }
       try { this._offWeatherGrass?.(); } catch { /* ignore */ }
       try { this.grassField?.destroy(); } catch { /* ignore */ }
+      try { destroyAmbientParticles(); } catch { /* ignore */ }
+      try { clearDynamicLights(this); } catch { /* ignore */ }
+      try { this.env?.destroy(); } catch { /* ignore */ }
+      try { (this.waterSystem as unknown as { destroy?: () => void })?.destroy?.(); } catch { /* ignore */ }
+      try { this.scale.off('resize'); } catch { /* ignore */ }
+      // Chunk textures live in Phaser's global TextureManager, so remove the
+      // scene's generated textures explicitly when this scene shuts down.
+      for (const key of this.activeChunks.keys()) chunkStream.removeChunkTexture(this, key);
+      this.fogRefreshQueue.length = 0;
+      this.fogRefreshKeys.clear();
     });
     // Camera zoom follows the setting live (slider / HUD buttons / keys).
     Bus.on('settings-applied', () => { try { this.applyCamZoom(); } catch { /* ignore */ } });
@@ -262,15 +316,16 @@ export default class WorldScene extends Phaser.Scene {
       }
     }
     const dt: number = Math.min(0.05, delta / 1000);
-    this.env.update(dt);
-    if (!S.session_dead) this.player.update(dt, this.envContextInput());
+    const paused: boolean = (S.session as unknown as { paused?: boolean })?.paused === true;
+    if (!paused) this.env.update(dt);
+    if (!S.session_dead && !paused) this.player.update(dt, this.envContextInput());
 
     // Defensive auto-attack: counter-swing when enemies attack or close to
     // melee range (toggle: Settings → Gameplay → "Auto-attack when attacked").
     if (!S.session_dead) { try { autoAttackTick(this, dt); } catch { /* assist never crashes the frame */ } }
 
-    // Grass overlay tick: wind ripple, coverage recycling, player trample.
-    if (this.grassField) { try { this.grassField.update(dt); } catch { /* grass never crashes the frame */ } }
+    // Grass overlay tick: frozen while paused so wind/coverage don't drift.
+    if (this.grassField && !paused) { try { this.grassField.update(dt); } catch { /* grass never crashes the frame */ } }
 
     // Sync atmospheric state so the chunk fog tint tracks time/weather.
     setAtmosphereState({
@@ -279,17 +334,18 @@ export default class WorldScene extends Phaser.Scene {
     });
     setFogEnabled(S.settings?.distanceFog !== false);
 
-    this.updateChunks();
+    chunkStream.updateChunks(this);
     const px: number = this.player.sprite.x, py: number = this.player.sprite.y;
 
-    // Refresh dynamic point lights (campfires, torches) — slow cadence.
-    if (this._frame % 30 === 0) refreshDynamicLights(this);
+    // Refresh dynamic point lights (campfires, torches) — 0.5s cadence.
+    this._accLights += dt;
+    if (this._accLights >= 0.5) { this._accLights = 0; refreshDynamicLights(this); }
     // Player-following lights (held torch) glide every frame — the slow
     // structural refresh alone made the glow trail and snap behind sprinting.
     followPlayerLights(this, px, py);
 
-    // Update animated water overlay
-    if (this.waterSystem) {
+    // Update animated water overlay (frozen while paused).
+    if (this.waterSystem && !paused) {
       const cam = this.cameras.main;
       this.waterSystem.update(dt, cam.scrollX + cam.width / 2, cam.scrollY + cam.height / 2,
         (GameState.session as any).timePhase === 'night', this.env?.weather || 'clear');
@@ -299,27 +355,52 @@ export default class WorldScene extends Phaser.Scene {
     updateAmbientParticles(this, _time, dt);
     // Phase D: world-space drifting fog banks around the player.
     try { updateFogCards(this, dt); } catch { /* canvas unavailable */ }
-    // Phase D: tutorial hint chain (one hint per 5s tick max).
-    if (this._frame % 300 === 0) {
-            import('../systems/TutorialSystem.ts').then((m: any) => { try { m.tutorialTick(); } catch { /* hints never crash */ } });
+    // Phase D: tutorial hint chain (5s tick).
+    this._accTutorial += dt;
+    if (this._accTutorial >= 5) {
+      this._accTutorial = 0;
+            import('../systems/narrative/TutorialSystem.ts').then((m: any) => { try { m.tutorialTick(); } catch { /* hints never crash */ } });
     }
 
     // Broadcast player world position so follow-the-player lights (torch)
-    // can track without polling.
-    if (this._frame % 2 === 0) {
+    // can track without polling (30Hz).
+    this._accPos += dt;
+    if (this._accPos >= 1 / 30) {
+      this._accPos = 0;
       Bus.emit('player-pos', { x: px, y: py });
     }
 
+    // Enemy simulation + culling. Only enemies inside the activity radius run
+    // their AI (a distant wolf must not burn a frame budget); everything
+    // outside the camera is hidden, because Phaser submits images whether or
+    // not they are on screen.
+    const view = this.cameras.main.worldView;
+    const cullPad = 160;
+    const viewL = view.x - cullPad, viewR = view.right + cullPad;
+    const viewT = view.y - cullPad, viewB = view.bottom + cullPad;
+    const activeR2 = ENEMY_ACTIVE_RADIUS * ENEMY_ACTIVE_RADIUS;
     for (const e of this.enemies) {
       if (e.dead) continue;
-      if ((e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 1250 * 1250) e.update(dt, this.envContextInput());
-      else if ((e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 1800 * 1800) e.update(dt, this.envContextInput());
+      const ex = e.sprite.x, ey = e.sprite.y;
+      const dx = ex - px, dy = ey - py;
+      const inView = ex >= viewL && ex <= viewR && ey >= viewT && ey <= viewB;
+      if (e.sprite.visible !== inView) e.sprite.setVisible(inView);
+      if (dx * dx + dy * dy < activeR2) e.update(dt, this.envContextInput());
       // Phase D: raiders besiege buildings when the player won't engage.
       try { this.enemyRaidTick(e, px, py, dt); } catch { /* raid tick never crashes */ }
     }
-    // Phase D: faction raid scheduler (~30s cadence).
-    if (this._frame % 1800 === 0) {
-            import('../systems/RaidSystem.ts').then((m: any) => { try { m.raidTick(this); } catch { /* raids never crash */ } });
+    // Raid resolved: if there were raiders and now none remain, emit event.
+    if (this._hadRaiders && !this.enemies.some((e) => !e.dead && e.raider)) {
+      Bus.emit('raid-resolved');
+      this._hadRaiders = false;
+    } else if (!this._hadRaiders && this.enemies.some((e) => !e.dead && e.raider)) {
+      this._hadRaiders = true;
+    }
+    // Phase D: faction raid scheduler (30s cadence).
+    this._accRaid += dt;
+    if (this._accRaid >= 30) {
+      this._accRaid = 0;
+            import('../systems/world/RaidSystem.ts').then((m: any) => { try { m.raidTick(this); } catch { /* raids never crash */ } });
     }
     GameState.session.inCombat = this.enemies.some((e) => !e.dead && e.sprite && (e.sprite.x - px) ** 2 + (e.sprite.y - py) ** 2 < 220 * 220);
 
@@ -328,13 +409,18 @@ export default class WorldScene extends Phaser.Scene {
     this.updateGatherProximity(px, py);
     this.updatePoiProximity(px, py);
     updateRegion(this, px, py, dt);
+    // Region travel: crossing into a region announces it and unlocks its
+    // waypoint (the saved `world.unlockedFastTravel` list the World Map reads).
+    tickRegionTravel(px, py);
     // Dynamic world events (brief §15): the scheduler decides, the runtime
     // builds — always through systems that already exist.
     tickWorldEvents(this, px, py, dt);
     this.updateNpcs(dt, px, py);
     this.gatherTick(dt);
-    // Building Occlusion Transparency: fade buildings if player is standing behind them
-    if (this._frame % 6 === 0 && this.buildings && this.buildings.size > 0) {
+    // Building Occlusion Transparency (10Hz): fade buildings if player stands behind them.
+    this._accOcc += dt;
+    if (this._accOcc >= 0.1 && this.buildings && this.buildings.size > 0) {
+      this._accOcc = 0;
       for (const [, img] of this.buildings) {
         if (!img || !img.active) continue;
         const dx = Math.abs(px - img.x);
@@ -346,42 +432,64 @@ export default class WorldScene extends Phaser.Scene {
       }
     }
     this.floats.update(dt);
-    if (this._frame % 6 === 0) this.updateMinimap(px, py);
-    // Update ambient biome sounds every ~2 seconds
-    if (this._frame % 120 === 0) {
+    // Minimap (10Hz) + ambient biome sounds (2s poll).
+    this._accMinimap += dt;
+    if (this._accMinimap >= 0.1) { this._accMinimap = 0; this.updateMinimap(px, py); }
+    this._accAmbient += dt;
+    if (this._accAmbient >= 2) {
+      this._accAmbient = 0;
       const biome = biomeAt(px, py);
       if (biome !== this._lastBiome) {
         this._lastBiome = biome;
-                import('../systems/AudioSystem.ts').then((a: any) => a.updateAmbient(biome));
+                import('../systems/audio/AudioSystem.ts').then((a: any) => a.updateAmbient(biome));
       }
     }
 
-    if (this._frame++ % 30 === 0) {
+    // Boss bar + saved player pos (0.5s).
+    this._accBoss += dt;
+    if (this._accBoss >= 0.5) {
+      this._accBoss = 0;
       S.world.px = Math.round(this.player.sprite.x);
       S.world.py = Math.round(this.player.sprite.y);
       try { this.refreshBossBar(px, py); } catch { /* boss UI cosmetic */ }
     }
-    // Phase C: night lighting mask redraw (every 4th frame, self-skips by day).
-    if (this._frame % 4 === 0) {
+    // Camera zoom: eased EVERY frame with dtMs (frame-rate independent).
+    // applyCamZoom expects milliseconds — dt here is seconds.
+    // Fit the screen-space overlay layer AFTER zoom, then redraw the night
+    // mask against the fresh camera so zooming never leaves bright edges.
+    try { this.applyCamZoom(dt * 1000); } catch { /* headless */ }
+    try { fitScreenLayer(this); } catch { /* pre-boot */ }
+    // Phase C: night lighting mask redraw (~15Hz, self-skips by day).
+    this._accMask += dt;
+    if (this._accMask >= 1 / 15) {
+      this._accMask = 0;
       try { updateNightMask(this); } catch { /* canvas unavailable */ }
     }
-    // Camera zoom: eased EVERY frame with dt (frame-rate independent), so the
-    // entry glide, wheel nudges and the combat bias curve smoothly instead of
-    // stepping — it used to be an 8% lerp gated to every 20th frame, which is
-    // 3 visible jumps per second (the steppy auto-zoom after CONTINUE).
-    // Fit the screen-space overlay layer AFTER this frame's zoom is applied —
-    // a gated fit (it used to be every 4th frame) left the overlays sized for a
-    // stale zoom and night/weather showed bright edges while zooming. Cheap:
-    // no-ops unless zoom or canvas changed.
-    try { this.applyCamZoom(dt); } catch { /* headless */ }
-    try { fitScreenLayer(this); } catch { /* pre-boot */ }
-    // Phase B cadence: station proximity follows the player; chunk relight
-    // tracks the clock without per-frame tint churn.
-    if (this._frame % 60 === 0) {
+    // Phase B cadence: station proximity + chunk relight + kingdom snapshot (1s).
+    this._accStations += dt;
+    if (this._accStations >= 1) {
+      this._accStations = 0;
       try { this.refreshStationsNear(); } catch { /* player may be dead */ }
-      try { this.relightChunks(); } catch { /* textures may be gone */ }
+      try { chunkStream.relightChunks(this); } catch { /* textures may be gone */ }
+      try { kingdomRefresh(); } catch { /* snapshot never blocks the frame */ }
+      try {
+        import('../systems/world/RaidSystem.ts').then((m: any) => {
+          try { m.raidResolveCheck(this); } catch { /* resolve never crashes */ }
+        });
+      } catch { /* raids never crash */ }
+    }
+    // Slow diplomacy drift (60s): relations cool without maintenance.
+    this._accFaction += dt;
+    if (this._accFaction >= 60) {
+      this._accFaction = 0;
+      try {
+        import('../systems/economy/FactionSystem.ts').then((m: any) => {
+          try { m.factionTick(); } catch { /* drift never crashes */ }
+        });
+      } catch { /* drift never crashes */ }
     }
     this.saveAcc += dt;
+    this._frame++;
   }
 
   envContextInput(): any {
@@ -398,79 +506,8 @@ export default class WorldScene extends Phaser.Scene {
     };
   }
 
-  /* ── Chunk streaming (spec §52) ─────────────────────────────────────── */
-  updateChunks(): void {
-    const cs = WORLD_CONFIG.chunkSize;
-    const pcx: number = Math.floor(this.player.sprite.x / cs);
-    const pcy: number = Math.floor(this.player.sprite.y / cs);
-    if (pcx === this.lastPcx && pcy === this.lastPcy) return;
-    this.lastPcx = pcx;
-    this.lastPcy = pcy;
-    const r = WORLD_CONFIG.activeChunkRadius;
-    const wanted = new Set<string>();
-    const px: number = this.player.sprite.x;
-    const py: number = this.player.sprite.y;
-    // Fog-of-war memory: remember visited chunks so the minimap can dim
-    // the unknown (was tracked in state but never written).
-    try {
-      const seen = GameState.s?.world?.exploredChunks;
-      if (Array.isArray(seen)) {
-        const known = new Set(seen);
-        for (let cy = pcy - r; cy <= pcy + r; cy++) {
-          for (let cx = pcx - r; cx <= pcx + r; cx++) {
-            const k: string = `${cx},${cy}`;
-            if (!known.has(k)) { known.add(k); seen.push(k); }
-          }
-        }
-        // Cap memory: drop oldest while far beyond any reasonable trek.
-        if (seen.length > 3000) seen.splice(0, seen.length - 3000);
-      }
-    } catch { /* minimap memory never blocks streaming */ }
-    for (let cy = pcy - r; cy <= pcy + r; cy++) {
-      for (let cx = pcx - r; cx <= pcx + r; cx++) {
-        const key: string = `${cx},${cy}`;
-        wanted.add(key);
-        if (!this.activeChunks.has(key)) {
-          const canvas = getChunkCanvas(cx, cy);
-          // Apply atmospheric perspective (distance fog) right after paint.
-          // Baked into the canvas; invalidated by chunkPainter.setAtmosphereState
-          // when time-of-day or weather buckets change.
-          const cxCenter: number = cx * cs + cs / 2;
-          const cyCenter: number = cy * cs + cs / 2;
-          applyFogToChunk(canvas, cxCenter - px, cyCenter - py);
-          const texKey: string = `chunk_${cx}_${cy}`;
-          if (!this.textures.exists(texKey)) {
-            const tex = this.textures.createCanvas(texKey, cs, cs);
-            const tctx = tex!.getContext();
-            tctx.drawImage(canvas, 0, 0);
-            tex!.refresh();
-          }
-          const img = this.add.image(cxCenter, cyCenter, texKey)
-            .setOrigin(0.5)
-            // Ground anchors BELOW the world's y range: entities (incl. trees)
-            // are y-sorted with setDepth(Math.round(y)), so the map spans
-            // ±WORLD_CONFIG.worldHalfExtent and negative-y entities would
-            // otherwise sink under a depth-0 ground and turn invisible.
-            .setDepth(-WORLD_CONFIG.worldHalfExtent * 2);
-          img.setDisplaySize(cs, cs);
-          this.chunkGroup.add(img);
-          this.activeChunks.set(key, img);
-          this.populateChunk(cx, cy);
-        }
-      }
-    }
-    // remove far chunks & evict painter cache
-    for (const [key, img] of [...this.activeChunks]) {
-      const parts: number[] = key.split(',').map(Number);
-      const x: number = parts[0] ?? 0;
-      const y: number = parts[1] ?? 0;
-      if (Math.abs(x - pcx) > r + 1 || Math.abs(y - pcy) > r + 1) {
-        img.destroy();
-        this.activeChunks.delete(key);
-      }
-    }
-    evictFarChunks(pcx, pcy, r);
-  }
+  /* Chunk streaming (spec §52) lives in ./chunkStreaming.ts — WorldScene
+     calls in (updateChunks per frame) and owns the tile/entity state. */
 
   /** Deterministically populate a chunk with gather nodes + enemies + PoIs. */
   populateChunk(cx: number, cy: number): void {
@@ -524,10 +561,11 @@ export default class WorldScene extends Phaser.Scene {
     GameState.s.world.discoveredPois.push(poi.id);
     (GameState as any).toast({ title: poi.label.toUpperCase(), msg: 'Location discovered · +65 XP', kind: 'discover', dur: 4200 });
     awardXP(65, 'discover');
-        import('../systems/QuestEngine.ts').then((q: any) => q.handleEvent({ type: 'discover', poiTag: poi.tag, poiKind: poi.kind, poi }));
+    // Discovery flows through the bus so BridgeSystem owns quest routing —
+    // a direct handleEvent here too would advance reach/reachCount steps 2×.
     Bus.emit('poi-discovered', { poi });
     this.syncPoisMarkers();
-        import('../systems/AchievementSystem.ts').then((a: any) => a.evaluateAll());
+        import('../systems/narrative/AchievementSystem.ts').then((a: any) => a.evaluateAll());
     if (poi.boss && !poi.looted) this.spawnEnemy(poi.boss, poi.x, poi.y);
     if (poi.kind === 'bandit_camp' && poi.chestTier) this.spawnChest(poi.x - 20, poi.y + 24, poi.chestTier, poi.id);
   }
@@ -572,15 +610,15 @@ export default class WorldScene extends Phaser.Scene {
     if (campId && campId.startsWith('bcamp_') && !S.world.ownedCamps.includes(campId)) {
       S.world.ownedCamps.push(campId);
       (GameState as any).toast({ title: 'TERRITORY CAPTURED', msg: 'Your banner rises over this camp.', kind: 'stage', dur: 4200 });
-            import('../systems/AchievementSystem.ts').then((a: any) => a.evaluateAll());
+            import('../systems/narrative/AchievementSystem.ts').then((a: any) => a.evaluateAll());
       this.add.image(img.x + 24, img.y - 34, 'banner').setDepth(5);
       setTimeout(() => {
-                import('../systems/QuestEngine.ts').then((q: any) => q.handleEvent({ type: 'territory-pct', pct: kingdomPct() }));
+                import('../systems/narrative/QuestEngine.ts').then((q: any) => q.handleEvent({ type: 'territory-pct', pct: kingdomPct() }));
       }, 300);
     }
   }
 
-  /* ── NPCs & recruitment (spec §21–22) — see systems/NpcSystem.ts ────── */
+  /* ── NPCs & recruitment (spec §21–22) — see systems/combat/NpcSystem.ts ────── */
   spawnWildNpcs(): void { npcSys.spawnWildNpcs(this); }
   spawnNpc(key: string, x: number, y: number): any { return npcSys.spawnNpc(this, key, x, y); }
   interactNpc(npc: any): void { npcSys.interactNpc(this, npc); }
@@ -644,25 +682,7 @@ export default class WorldScene extends Phaser.Scene {
     buildSys.showStationRadius(this, station);
   }
 
-  /**
-   * Phase B: real ground relight. Tints active chunk images toward a cool
-   * night blue (or warm dawn/dusk) instead of relying only on the dark
-   * overlay — the ground itself now participates in day/night.
-   */
-  relightChunks(): void {
-    const t = GameState.s.world.timeOfDay;
-    const DAWN_T = 0.24, DUSK_T = 0.78;
-    const isNight: boolean = t > DUSK_T || t < DAWN_T;
-    const golden: boolean = (t > 0.2 && t < 0.3) || (t > 0.72 && t < 0.82);
-    for (const img of this.activeChunks.values()) {
-      if (!img || !img.scene) continue;
-      if (isNight) img.setTint(0x8a94c0);
-      else if (golden) img.setTint(0xffe2b8);
-      else img.clearTint();
-    }
-  }
-
-  /* ── Projectiles (spec §18) — see systems/ProjectileSystem.ts ───────── */
+  /* ── Projectiles (spec §18) — see systems/combat/ProjectileSystem.ts ───────── */
   setupProjectiles(): void { projSys.setupProjectiles(this); }
   spawnProjectile(o: any): any { return projSys.spawnProjectile(this, o); }
   updateProjectiles(dt: number): void { projSys.updateProjectiles(this, dt); }
@@ -777,6 +797,36 @@ export default class WorldScene extends Phaser.Scene {
     return regionSnapshot(this);
   }
 
+  /**
+   * Put the player down at a world position — the one scene-side need region
+   * fast travel has (systems/world/RegionTravel). Also what the `rise.teleport`
+   * dev command uses, so there is one implementation of "move the hero".
+   */
+  movePlayer(x: number, y: number): void {
+    const nx: number = Number(x), ny: number = Number(y);
+    if (!Number.isFinite(nx) || !Number.isFinite(ny)) return;
+    const sp: Phaser.GameObjects.Sprite | undefined = this.player?.sprite;
+    if (sp) {
+      try {
+        const body = sp.body as Phaser.Physics.Arcade.Body | null;
+        if (body && typeof body.reset === 'function') body.reset(nx, ny);
+        else sp.setPosition(nx, ny);
+      } catch { try { sp.x = nx; sp.y = ny; } catch { /* sprite write failed */ } }
+    }
+    GameState.s.world.px = Math.round(nx);
+    GameState.s.world.py = Math.round(ny);
+    // A relocation is not a walk: the camera follow uses an exponential lerp,
+    // so a waypoint jump used to fly the camera across the map for seconds —
+    // through chunks that have not streamed, i.e. empty terrain. Snap instead.
+    try { this.cameras?.main?.centerOn(nx, ny); } catch { /* camera not ready */ }
+  }
+
+  /** Fast travel to a region's waypoint (World Map). Returns where you landed. */
+  regionTravel(regionId: string): string | null {
+    const wp = fastTravel(this, regionId);
+    return wp ? wp.label : null;
+  }
+
   /** Dynamic world-event state (live probes / debugging). */
   worldEvents(): Record<string, unknown> {
     return worldEventSnapshot(this);
@@ -859,7 +909,7 @@ export default class WorldScene extends Phaser.Scene {
   refreshBossBar(px: number, py: number): void { bossSys.refreshBossBar(this, px, py); }
 
   refreshSurvivalHud(): void {
-    GameState.notify('PLAYER');
+    GameState.notify(CH.PLAYER);
   }
 }
 

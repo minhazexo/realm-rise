@@ -4,7 +4,7 @@ import GameState from '../src/game/core/GameState.ts';
 import {
   SAVE_VERSION, cmpVersions, migrations, migrateSave,
   serialize, saveToSlot, loadFromSlot, importSlotData, listSaves
-} from '../src/game/systems/SaveSystem.ts';
+} from '../src/game/systems/persistence/SaveSystem.ts';
 import { newInstance } from '../src/game/data/items.ts';
 
 const store = {};

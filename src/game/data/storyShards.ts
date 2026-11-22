@@ -11,7 +11,7 @@
 // the world records once it is taken. Nothing here touches Phaser, so the
 // spine's geography and gating are unit-testable (tests/shards.mjs).
 //
-// The gate rules live in systems/ShardSystem.ts; the prose in data/voices.ts.
+// The gate rules live in systems/narrative/ShardSystem.ts; the prose in data/voices.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The thing that will not let a shard go. `radius` is how close it counts. */
@@ -126,18 +126,18 @@ export const SHARDS: ShardDef[] = [
   {
     id: 'shard_ash',
     order: 5,
-    name: 'The Ash Shard',
+    name: 'The Ashen Reliquary',
     item: 'shard_of_ash',
     flag: 'shard_ash_taken',
     quest: 'sq_shard_ash',
     area: 'pyre',
     site: { x: 780, y: -1600 },
     guardian: { key: 'warden_of_ash', label: 'the Warden of Ash', radius: 420, boss: true },
-    heldText: 'The last fragment is inside the crown of the pyre, and the Warden of Ash is still standing over it.',
+    heldText: 'The last cut in the anchor is inside the crown of the pyre, and the Warden of Ash is still standing over it.',
     inscription: [
-      'The Warden’s armour empties as it falls — a man-shaped nothing with the fragment where the heart went.',
-      'It was never corrupted. It was posted here, and it held this fragment for a kingdom that stopped existing.',
-      'The fifth anchor is the one that broke. The Veil walked into Aetheria through the hole where this shard used to be.'
+      'The Warden’s armour empties as it falls — a man-shaped nothing with the Reliquary where the heart went.',
+      'It was never corrupted. It was posted here, and it held this vessel for a kingdom that stopped existing. The Order calls it the Ashen Reliquary: an emergency anchor made out of a promise.',
+      'It can stand in the fifth cut. It cannot give back what the Crown Ember spent to keep one drowned stranger breathing — and when the shrine asks, it will ask for that too.'
     ]
   }
 ];
@@ -173,11 +173,12 @@ export const BARRIER = {
   coldText: 'The anchor is cold. It wants five fragments and it has',
   /** Shown when it finally takes them. */
   raisedTitle: 'THE FIVEFOLD ANCHOR',
-  raisedText: 'The fragments go into the stone like keys into locks. The Veil recoils — far out, past the horizon, something that had been leaning on the world stands up straight and takes its weight off.',
+  raisedText: 'Four fragments and the Ashen Reliquary go into the stone like keys into locks. The fifth cut stays empty — because the fifth anchor is not a stone, and it is standing here with the shrine’s cold water running through two shaking hands. Far out past the horizon, something that had been leaning on the world stands up straight and takes its weight off.',
   epilogue: [
     'You asked, once, why the sea let you live when it took the ship and everyone on it.',
-    'The fifth anchor was aboard that ship. It went into the water with you, and the barrier — with nothing left to hold — turned all five of its hands to keeping one drowned stranger breathing.',
-    'You are alive because the barrier chose you over the kingdom. The Veil got in through the gap that choice made.',
+    'The fifth anchor was never in the crate. It was the Crown Ember, and when the ship went down the barrier turned all five of its hands to keeping one drowned stranger breathing.',
+    'That mercy is the gap the Veil came through. The frontier has been paying for your life since the tide left you on the sand.',
+    'The four cuts are filled. The Reliquary takes the fifth. The shrine does not ask you to die — it asks you to understand what you are carrying, and then to decide who else is allowed to carry it.',
     'Mara asks what happens now. The honest answer is that the anchor is holding, the frontier holds it, and neither of those is the same as forgiven.',
     'The gate is shut. You are still standing on the wrong side of it — and for the first time since the shore, that is a choice you made on purpose.'
   ]

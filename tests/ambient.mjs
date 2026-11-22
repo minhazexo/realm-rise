@@ -1,9 +1,9 @@
 // Tests for AmbientParticles: world-anchored emitters, quality gating,
 // reduced-motion teardown, and the bird burst argument fix.
 import GameState from '../src/game/core/GameState.ts';
-import { updateSettings } from '../src/game/systems/SettingsSystem.ts';
+import { updateSettings } from '../src/game/systems/environment/SettingsSystem.ts';
 import { setWorldSeed, biomeAt } from '../src/game/world/worldGen.ts';
-import { updateAmbientParticles, destroyAmbientParticles } from '../src/game/systems/AmbientParticles.ts';
+import { updateAmbientParticles, destroyAmbientParticles } from '../src/game/systems/world/AmbientParticles.ts';
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.error('✗ ' + m); } else console.log('✓ ' + m); };

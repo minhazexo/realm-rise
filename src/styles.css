@@ -525,7 +525,14 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 .navigation-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--parch); }
 .navigation-card small { display: block; font-size: 10px; color: #a5cbd0; }
 .navigation-card button { flex-shrink: 0; background: transparent; color: var(--parch); border: 0; cursor: pointer; padding: 5px; }
-.worldmap-canvas { width: 100%; height: auto; display: block; cursor: crosshair; border-radius: 6px; }
+.worldmap-canvas { width: 100%; height: auto; display: block; cursor: grab; border-radius: 6px; touch-action: none; }
+.worldmap-canvas:active { cursor: grabbing; }
+.map-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 2px; }
+.map-controls button { background: #152c35; border: 1px solid #385963; border-radius: 5px; color: var(--parch);
+  cursor: pointer; padding: 5px 9px; font-family: inherit; font-size: 12px; }
+.map-controls button:hover { border-color: #5d8794; }
+.map-readout { margin-left: auto; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 11px;
+  color: #a5cbd0; text-align: right; min-width: 180px; }
 #minimap-canvas { cursor: crosshair; }
 .map-navigation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; margin: 10px 0; color: #a5cbd0; }
 .map-navigation-actions button, .map-panel .poi-row button { background: #152c35; border: 1px solid #385963; border-radius: 5px; color: var(--parch); cursor: pointer; padding: 5px 9px; }
@@ -601,8 +608,11 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 .army-unit em { display: block; font-size: 10px; color: var(--blood); font-style: normal; margin-top: 2px; }
 
 /* ── Map panel ────────────────────────────────────────────────────────── */
-.map-panel { width: 420px; }
-.map-canvas-wrap { width: 100%; aspect-ratio: 4/3; background: var(--night); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+/* The map is the one panel that earns the width: it is read at a glance and it
+   is the only place the whole frontier is visible. The canvas keeps its own
+   aspect (520×300) so a stretched box never lies about distance. */
+.map-panel { width: 600px; max-width: 94vw; }
+.map-canvas-wrap { width: 100%; aspect-ratio: 26 / 15; background: var(--night); border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
 .map-canvas-wrap canvas { width: 100%; height: 100%; display: block; }
 
 /* ── Journal panel ────────────────────────────────────────────────────── */
@@ -636,6 +646,23 @@ html, body { overflow: hidden; font-family: 'Spectral', serif; background: var(-
 .char-stat { padding: 6px; background: rgba(36,29,23,0.4); border-radius: 4px; }
 .char-stat b { font-size: 12px; color: var(--parch); }
 .char-stat span { font-size: 11px; color: var(--parch-dim); margin-left: 4px; }
+.character-identity { display:flex; gap:12px; align-items:center; margin-bottom:10px; padding:8px; border:1px solid rgba(201,162,75,.24); border-radius:8px; background:linear-gradient(135deg,rgba(58,78,88,.34),rgba(24,21,18,.62)); }
+.character-portrait-frame { flex:0 0 104px; min-height:136px; display:grid; place-items:center; border-radius:6px; background:radial-gradient(circle at 50% 35%,rgba(109,170,184,.24),rgba(10,12,14,.72)); box-shadow:inset 0 0 22px rgba(0,0,0,.35); overflow:hidden; }
+.character-identity-copy { min-width:0; }
+.character-identity-copy h2 { margin:0 0 5px; }
+.character-tags { display:flex; flex-wrap:wrap; gap:5px; }
+.character-tags span { padding:2px 6px; border:1px solid rgba(159,180,204,.2); border-radius:999px; color:#b9c9d8; font-size:9px; text-transform:uppercase; letter-spacing:.6px; }
+.character-flavor { margin-top:7px; color:var(--parch-dim); font-size:10px; line-height:1.35; }
+.character-condition, .character-detail-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:10px; }
+.character-condition span, .character-detail-grid span { display:flex; justify-content:space-between; gap:5px; padding:5px 7px; border-radius:4px; background:rgba(36,29,23,.38); font-size:10px; }
+.character-condition b, .character-detail-grid b { color:var(--parch-dim); font-weight:500; }
+.character-condition i, .character-detail-grid i { color:var(--parch); font-style:normal; font-weight:700; }
+@media (max-width:480px) {
+  .character-identity { align-items:flex-start; }
+  .character-portrait-frame { flex-basis:82px; min-height:108px; }
+  .character-portrait-frame canvas { width:82px !important; height:108px !important; }
+  .character-condition, .character-detail-grid { grid-template-columns:1fr 1fr; }
+}
 
 @media (max-width: 768px) {
   .menu-title { font-size: 32px; }
@@ -1047,4 +1074,31 @@ html[data-colorblind-hints="1"] .water .stat-fill { background: linear-gradient(
   flex-shrink: 0;
   display: flex; align-items: center; gap: 8px;
   min-width: 130px;
+}
+.hud-survival-toggles {
+  position: fixed;
+  top: 5.25rem;
+  right: 1rem;
+  z-index: 120;
+  display: flex;
+  gap: .45rem;
+  pointer-events: auto;
+}
+.hud-quick-toggle {
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(12,18,24,.82);
+  color: #d7e0e8;
+  border-radius: 999px;
+  padding: .38rem .7rem;
+  font: 600 12px/1.1 system-ui, sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.hud-quick-toggle.on {
+  border-color: rgba(104,220,170,.55);
+  box-shadow: 0 0 14px rgba(104,220,170,.16);
+}
+@media (max-width: 700px) {
+  .hud-survival-toggles { top: 4.5rem; right: .55rem; }
+  .hud-quick-toggle { padding: .32rem .55rem; font-size: 11px; }
 }

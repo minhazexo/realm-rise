@@ -12,7 +12,7 @@ export const CHEST_POOLS: Record<string, ChestDrop[]> = {
   wooden_chest: [['wood', 12, 0.9], ['stone', 6, 0.8], ['berries', 6, 0.7], ['fiber', 8, 0.8], ['leather_hide', 2, 0.5], ['torch', 2, 0.6]],
   iron_chest: [['iron_ore', 6, 0.9], ['coal', 8, 0.9], ['cooked_meat', 4, 0.7], ['silver', 2, 0.4], ['wooden_sword', 1, 0.2], ['arrows', 12, 0.6]],
   royal_chest: [['gold_nugget', 6, 0.9], ['steel_ingot', 3, 0.7], ['healing_salve', 2, 0.6], ['iron_sword', 1, 0.4], ['repair_kit', 1, 0.5]],
-  ancient_chest: [['ancient_core', 1, 1], ['moonstone', 2, 0.8], ['crystal', 4, 0.9], ['ancient_relic', 2, 0.9], ['treasure_map', 1, 0.6]],
+  ancient_chest: [['ancient_core', 1, 1], ['moonstone', 2, 0.8], ['crystal', 4, 0.9], ['ancient_relic', 2, 0.9], ['treasure_map', 1, 0.6], ['nightfall_bow', 1, 0.15]],
 };
 
 /** Fallback pool for unknown chest tiers (matches legacy behavior). */

@@ -1,0 +1,179 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// DynamicLights (spec §63 — "atmospheric lighting"):
+//
+// Adds Phaser point-light style glow around torches and campfires. Real
+// Phaser 4 lights require the WebGL lights pipeline; for a lightweight
+// cross-renderer solution we overlay a soft radial-gradient sprite on
+// top of every light-emitting entity (campfire, torch, fire spell).
+//
+// Each light is a pre-baked radial-gradient texture that fades to
+// transparent. We attach/detach lights by reading the settlement's
+// buildings list and the player's equipped-offhand torch.
+// ─────────────────────────────────────────────────────────────────────────────
+import GameState from '../../core/GameState.ts';
+import { Bus } from '../../core/EventBus.ts';
+import { isNightAt } from './EnvSystem.ts';
+import { photosensitiveMode, reducedMotion } from './SettingsSystem.ts';
+
+const TEX_KEY = 'fx_light_v2';
+
+/** A light that should exist right now (world position + radius scale). */
+export interface WantedLight {
+  x: number;
+  y: number;
+  scale: number;
+  kind: 'fire' | 'torch';
+}
+
+/** Live light entry owned by the scene. */
+interface DynLightEntry {
+  sprite: Phaser.GameObjects.Image;
+  def: WantedLight;
+  phase: number;
+}
+
+/** Minimal scene surface consumed by the dynamic-light layer. */
+export type DynLightScene = Phaser.Scene & {
+  _dynLights?: Map<string, DynLightEntry>;
+};
+
+/** Bake a softer, bigger radial gradient than the existing fx_light. */
+export function ensureDynamicLightTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX_KEY)) return;
+  const size = 256;
+  // Generate canvas locally to avoid a Node test-side 'document' error.
+  if (typeof document === 'undefined') return;
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  if (!ctx) return;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 6, size / 2, size / 2, size / 2);
+  g.addColorStop(0.00, 'rgba(255,210,120,0.95)');
+  g.addColorStop(0.18, 'rgba(255,180,80,0.55)');
+  g.addColorStop(0.42, 'rgba(255,140,60,0.22)');
+  g.addColorStop(0.75, 'rgba(255,110,40,0.06)');
+  g.addColorStop(1.00, 'rgba(255,90,30,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  scene.textures.addCanvas(TEX_KEY, c);
+}
+
+/**
+ * Attach dynamic lights to the scene based on current game state.
+ * Called from WorldScene.update on a slow cadence (~every 30 frames).
+ */
+export function refreshDynamicLights(scene: DynLightScene): void {
+  ensureDynamicLightTexture(scene);
+  if (!scene._dynLights) scene._dynLights = new Map<string, DynLightEntry>();
+  const dynLights = scene._dynLights;
+
+  const wanted: Map<string, WantedLight> = collectWantedLights();
+
+  // Remove lights that no longer exist
+  for (const [key, light] of dynLights) {
+    if (!wanted.has(key)) {
+      try { light.sprite.destroy(); } catch { /* already gone */ }
+      dynLights.delete(key);
+    }
+  }
+
+  // Add / update active lights — with Phase B fire flicker (±12% at ~7Hz
+  // with per-light phase, plus dimming at full day so torches read at night).
+  // Flicker is disabled in photosensitive / reduced-motion modes.
+  const calm = photosensitiveMode() || reducedMotion();
+  const now = (typeof performance !== 'undefined' ? performance.now() : 0);
+  let dayDim = 1;
+  try {
+    const t: number | undefined = GameState.s?.world?.timeOfDay;
+    if (typeof t === 'number') dayDim = isNightAt(t) ? 1 : 0.45;
+  } catch { /* default full bright */ }
+  for (const [key, def] of wanted) {
+    let entry = dynLights.get(key);
+    if (!entry) {
+      const tex: string = scene.textures.exists(TEX_KEY) ? TEX_KEY : 'fx_light';
+      const sprite: Phaser.GameObjects.Image = scene.add.image(def.x, def.y, tex)
+        .setBlendMode('ADD')
+        .setDepth(3850)
+        .setScrollFactor(1)
+        .setScale(def.scale);
+      entry = { sprite, def, phase: Math.random() * Math.PI * 2 };
+      dynLights.set(key, entry);
+    } else {
+      if (!entry.sprite?.active) { dynLights.delete(key); continue; }
+      try { entry.sprite.setPosition(def.x, def.y); } catch { dynLights.delete(key); continue; }
+      entry.def = def;
+    }
+    const flicker = calm ? 1 : 1 + 0.12 * Math.sin(now / 140 + (entry.phase || 0));
+    entry.sprite.setScale(def.scale * flicker * dayDim);
+    // Day dimming must also fade the glow — scale alone left a full-bright
+    // fire core hovering in the noon sun. Kept restrained so overlapping
+    // torch + campfire + skyGlow + bloom don't flare to white.
+    entry.sprite.setAlpha(0.25 + 0.55 * dayDim);
+  }
+}
+
+/**
+ * Per-frame position sync for player-following lights (the held torch).
+ * The structural refresh above only runs on a slow cadence — without this
+ * the torch glow visibly trailed the player and snapped every ~30 frames.
+ */
+export function followPlayerLights(scene: DynLightScene, x: number, y: number): void {
+  const dynLights = scene._dynLights;
+  if (!dynLights) return;
+  for (const [key, entry] of dynLights) {
+    if (key.startsWith('player:')) {
+      if (!entry.sprite?.active) continue;
+      try { entry.sprite.setPosition(x, y - 4); } catch { continue; }
+      entry.def.x = x;
+      entry.def.y = y - 4;
+    }
+  }
+}
+
+/** Destroy all dynamic-light sprites for a scene (call on shutdown). */
+export function clearDynamicLights(scene: DynLightScene): void {
+  const dynLights = scene._dynLights;
+  if (!dynLights) return;
+  for (const [, entry] of dynLights) {
+    try { entry.sprite.destroy(); } catch { /* ignore */ }
+  }
+  dynLights.clear();
+}
+
+/** Compute which dynamic lights should exist right now. Exported for NightLights. */
+export function collectWantedLights(): Map<string, WantedLight> {
+  const out = new Map<string, WantedLight>();
+  const S = GameState.s;
+  if (!S) return out;
+
+  // 1. Campfires / hearths in the settlement
+  if (S.settlement?.buildings) {
+    for (const b of S.settlement.buildings) {
+      if (!b.complete) continue;
+      const isFire = b.key === 'campfire' || b.key === 'hearth' || b.key === 'forge';
+      if (!isFire) continue;
+      const k = `bld:${b.uid}`;
+      out.set(k, { x: b.x, y: b.y - 8, scale: b.key === 'forge' ? 2.4 : 1.8, kind: 'fire' });
+    }
+  }
+
+  // 2. Player's equipped torch (off-hand or charm slot)
+  const offhandId: string | undefined = S.player.equipment?.offhand?.id;
+  if (offhandId && /torch/i.test(offhandId)) {
+    const p = GameState._playerWorldXY;
+    if (p) {
+      out.set('player:torch', { x: p.x, y: p.y - 4, scale: 1.4, kind: 'torch' });
+    }
+  }
+
+  return out;
+}
+
+/** Helper: world position update channel for player-following lights. */
+Bus.on('player-pos', (xy: unknown) => {
+  const p = xy as { x?: unknown; y?: unknown } | null;
+  if (p && typeof p.x === 'number') {
+    GameState._playerWorldXY.x = p.x;
+    GameState._playerWorldXY.y = Number(p.y) || 0;
+  }
+});

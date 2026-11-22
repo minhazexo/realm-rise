@@ -2,7 +2,7 @@
 import type { JSX } from 'react';
 import GameState from '../../../game/core/GameState.ts';
 import { SKILLS } from '../../../game/data/skills.ts';
-import { saveToSlot } from '../../../game/systems/SaveSystem.ts';
+import { saveToSlot } from '../../../game/systems/persistence/SaveSystem.ts';
 import { sceneCommand } from '../../../game/main.ts';
 import { close } from './shared.tsx';
 

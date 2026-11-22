@@ -94,7 +94,7 @@ export const BOOKS: Record<string, BookDef> = {
     lines: [
       'A settler’s notice, burned back to one corner of one page. The order is legible — all settlers to the watchtower, the road south is lost.',
       '"THE FIVEFOLD ANCHOR: five fragments, one per quarter of the old realm, one kept in the crown’s own hand. While all five sit in their stones, the Veil does not move."',
-      '"Four stones are named: the wood, the watch, the hollow, and the crown’s own hearth. The fifth was never written down, which is either the safest thing they ever did or the stupidest."'
+      '"Four stones are named: the wood, the watch, the hollow, and the crown’s own hearth. The fifth was carried in the crown’s own keeping, which is either the safest thing they ever did or the stupidest."'
     ]
   },
   spilled_ledger: {
@@ -149,7 +149,7 @@ export const BOOKS: Record<string, BookDef> = {
     title: 'The Ash-Crowned Stone',
     lines: [
       'A stone at the pyre’s edge, smooth where generations of hands have rested on it. The whole life of the Warden of Ash is cut here in eleven short lines.',
-      '"POST: the fifth anchor. RELIEF: none scheduled."',
+      '"POST: the fifth anchor, held as the Ashen Reliquary. RELIEF: none scheduled. CARRIER: the crown’s own blood, if any of it is left."',
       '"If the post is relieved, the relief will be a stranger. They will not know what they carry. Tell them anyway."'
     ]
   },
@@ -157,7 +157,7 @@ export const BOOKS: Record<string, BookDef> = {
     title: 'The Fivefold Anchor',
     lines: [
       'The block at the shrine’s heart is not a statue. It is a socket, and its five cuts are empty and shaped exactly like the fragments.',
-      '"When the five are returned, the Veil has nowhere to lean. The frontier holds, because holding is what a frontier is for."',
+      '"When the four fragments are returned and the Reliquary takes the fifth cut, the Veil has nowhere to lean. The frontier holds, because holding is what a frontier is for."',
       'Someone has scratched the end of the sentence away, and then scratched a worse one after it: "or it holds until the next fool takes one for a trophy."'
     ]
   }

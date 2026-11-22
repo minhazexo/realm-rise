@@ -1,0 +1,133 @@
+{
+  "teleport": {
+    "out": "teleported to (0, 0)",
+    "px": 0,
+    "py": 0,
+    "unlocked": []
+  },
+  "timeline": [
+    {
+      "t": 14634,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 17613,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 20961,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 30761,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 37296,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 40531,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 43800,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 47048,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 50319,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 56802,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 60150,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 63628,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 64768,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 65907,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    },
+    {
+      "t": 66978,
+      "canvas": 1,
+      "hud": 1,
+      "root": 1,
+      "overlay": 0,
+      "session": null
+    }
+  ],
+  "chartedValue": null,
+  "clickError": "Error: locator.boundingBox: Page crashed",
+  "errors": []
+}

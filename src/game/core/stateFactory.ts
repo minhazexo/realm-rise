@@ -1,7 +1,7 @@
 // Default persistent-state factory. Everything that survives save/load starts here.
 import { VERSION, INVENTORY_BASE_SLOTS, AUTOSAVE_INTERVAL_SEC } from './Constants.ts';
 import type { DifficultyKey } from './Constants.ts';
-import { SETTINGS_DEFAULTS } from '../systems/SettingsSystem.ts';
+import { SETTINGS_DEFAULTS } from '../systems/environment/SettingsSystem.ts';
 
 export interface AppearanceState {
   skin: string;
@@ -70,6 +70,8 @@ export interface PlayerState {
   coldExposure: number;
   gold: number;
   reputation: number;
+  /** ARPG mana pool for staff weapons (migrated onto pre-1.1 saves). */
+  mana: number;
   equipment: EquipmentSlots;
   skills: Record<string, any>;
   derived: Record<string, any> | null; // assembled by ProgressionSystem.recompute()
@@ -147,6 +149,9 @@ export interface WorldState {
   dayCount: number;
   timeOfDay: number;
   chapterEventsSeen: string[];
+  /** Last saved player world position (written every 0.5s while in world). */
+  px: number;
+  py: number;
   [key: string]: any;
 }
 
@@ -187,6 +192,7 @@ export interface StatsState {
   kills: number;
   crafted: number;
   nightsSurvived: number;
+  deaths: number;
   [key: string]: number;
 }
 
@@ -310,7 +316,9 @@ export function createStateDefaults(seed: number): GameRootState {
       weatherTimer: 0,
       dayCount: 1,
       timeOfDay: 0.32,
-      chapterEventsSeen: []
+      chapterEventsSeen: [],
+      px: 0,
+      py: 260
     },
 
     quests: {
@@ -336,7 +344,7 @@ export function createStateDefaults(seed: number): GameRootState {
 
     achievements: {},       // id -> timestamp
 
-    stats: { kills: 0, crafted: 0, nightsSurvived: 0 },
+    stats: { kills: 0, crafted: 0, nightsSurvived: 0, deaths: 0 },
 
     settings: {
       // Schema owned by SettingsSystem.SAVE_SETTINGS_KEYS. New toggles added

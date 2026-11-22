@@ -1,16 +1,24 @@
 /// <reference lib="dom" />
 // ─────────────────────────────────────────────────────────────────────────────
-// Quadruped sheet builder — wolves, boars, bears — 12 frames.
+// Quadruped sheet builder — wolves, boars, bears, deer — 12 frames.
 //
 // Produces a 3×4 grid of animation frames (3 walk phases × 4 directions).
-// Each frame is 44×30 px (QUAD_W × QUAD_H).
+// Each frame displays at 44×30 px (QUAD_W × QUAD_H) — the texture behind it
+// carries `VISUAL_PROFILE.artScale`× the texels, so collision, anchors and
+// display sizes are unchanged while the art stays sharp at the camera's zoom.
 //
 // Quadrupeds are mirrored horizontally for left/right facing.
+//
+// Painterly pass (docs/ART-DIRECTION.md): feathered contact shadow, one lit
+// body/head form with a shaded far side, two-tone legs for depth order, and a
+// rim light on the lit edge so wildlife reads against dark biomes and at night.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
   QUAD_W, QUAD_H, DIR_ROWS, OUTLINE,
-  makeCanvas, registerFrames, circ, ell, tri, shade,
+  makeSheetPaint, registerFrames, circ, ell, tri, shade,
+  featherShadow, radialGrad, rgba,
 } from './artCore.ts';
+import { contourWidth } from '../core/VisualProfile.ts';
 import type * as Phaser from 'phaser';
 
 // ── Quadruped anatomy proportions ───────────────────────────────────────────
@@ -74,7 +82,8 @@ export interface QuadrupedSheetCfg {
  */
 export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: QuadrupedSheetCfg): string[] {
   const names: string[] = [];
-  const { canvas, ctx } = makeCanvas(QUAD_W * 3, QUAD_H * 4);
+  const sheet = makeSheetPaint(QUAD_W * 3, QUAD_H * 4);
+  const ctx = sheet.ctx;
   const fur   = cfg.fur   || '#7a7060';
   const belly = cfg.belly || '#b3aa97';
   const bulk  = cfg.bulk  || 1;
@@ -82,6 +91,10 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
   const bodyRx = (BODY_RX - 2.2 * slim) * bulk;
   const bodyRy = (BODY_RY - 1.1 * slim) * bulk;
   const legLen0 = LEG_BASE_LEN + 3.5 * slim;
+  // Gameplay-plane contour: characters and enemies read as forms (ART §6).
+  const contour = contourWidth('gameplay');
+  // Lit edge (top-left) rim colour, derived from the belly tone.
+  const rim = rgba(shade(belly, 70), 0.4);
 
   DIR_ROWS.forEach((dir, row) => {
     for (let p = 0; p < 3; p++) {
@@ -94,36 +107,49 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
 
       ctx.save();
 
-      // Mirror for right-facing
+      // Mirror for right-facing: reflect about the frame's own centre line.
       if (flip < 0) {
-        ctx.translate(ox + QUAD_W / 2 + ox + QUAD_W / 2, 0);
+        ctx.translate(2 * ox + QUAD_W, 0);
         ctx.scale(-1, 1);
       }
 
       const bx = ox + QUAD_W / 2; // body centre X
       const by = oy + QUAD_H / 2 + bobY; // body centre Y (bobbed)
 
-      // ── Ground shadow ─────────────────────────────────────────────────
-      ell(ctx, bx, oy + QUAD_H - 3, SHADOW_RX, SHADOW_RY, 'rgba(0,0,0,0.18)', null);
+      // ── Ground shadow (painterly: soft feathered falloff) ──────────────
+      featherShadow(ctx, bx, oy + QUAD_H - 3, SHADOW_RX * 1.15, SHADOW_RY * 1.6, 0.26);
 
       // ── Legs ──────────────────────────────────────────────────────────
-      ctx.fillStyle = shade(fur, -24);
       // Front/back views use symmetric leg pairs; side views keep the offset set.
       const strideLegs: Array<[number, number]> = (dir === 'down' || dir === 'up')
         ? [[-8, 0], [-5, 1], [5, 0], [8, 1]]
         : LEG_POSITIONS;
       strideLegs.forEach(([lx, i]) => {
         const legLen = legLen0 + (i ? stepA : -stepA);
+        // Two tones give the walk a depth order: the far pair sits in the
+        // body's shadow, the near pair catches the light.
+        ctx.fillStyle = i ? shade(fur, -32) : shade(fur, -12);
         ctx.fillRect(bx + lx * flip, by + 4, LEG_W, legLen);
       });
 
-      // ── Body ──────────────────────────────────────────────────────────
-      ell(ctx, bx, by, bodyRx, bodyRy, fur, OUTLINE, 0);
-      // belly highlight
-      ell(ctx, bx, by + 2.6, 9, 3.6, belly, null);
+      // ── Body: one lit form, not a flat ellipse ────────────────────────
+      const bodyGrad = radialGrad(
+        ctx, bx - bodyRx * 0.38, by - bodyRy * 0.55, bodyRx * 0.12, bodyRx * 1.6,
+        [[0, shade(fur, 30)], [0.5, fur], [1, shade(fur, -28)]],
+      );
+      ell(ctx, bx, by, bodyRx, bodyRy, bodyGrad, OUTLINE, 0, contour);
+      // belly highlight (soft, so it reads as light on fur, not a pasted shape)
+      ell(ctx, bx, by + 2.6 * bulk, 9 * bulk, 3.6 * bulk, rgba(belly, 0.8), null);
+      // Rim light along the lit edge. The arc spans the top of the form, so it
+      // stays put when the frame is mirrored for right-facing rows.
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, Math.max(1, bodyRx - 1.4), Math.max(1, bodyRy - 1), 0, Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
 
       // ── Tail ──────────────────────────────────────────────────────────
-      ctx.strokeStyle = fur; ctx.lineWidth = 3.4;
+      ctx.strokeStyle = shade(fur, -10); ctx.lineWidth = 3.4;
       if (dir === 'up') {
         // Rear view: tail hangs down the centre of the rump.
         ctx.beginPath();
@@ -158,9 +184,20 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
       } else {
       const hx = bx + HEAD_OFFSET_X * flip;
       const hy = by + HEAD_OFFSET_Y;
-      circ(ctx, hx, hy, HEAD_R * bulk, fur, OUTLINE);
+      const headR = HEAD_R * bulk;
+      const headGrad = radialGrad(
+        ctx, hx - headR * 0.4, hy - headR * 0.5, headR * 0.15, headR * 1.8,
+        [[0, shade(fur, 26)], [0.55, fur], [1, shade(fur, -26)]],
+      );
+      circ(ctx, hx, hy, headR, headGrad, OUTLINE, contour);
+      // Head rim (top edge — mirror-invariant, like the body rim).
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.arc(hx, hy, Math.max(1, headR - 0.9), Math.PI * 1.12, Math.PI * 1.88);
+      ctx.stroke();
       // snout
-      ell(ctx, hx + SNOUT_OFFSET * flip, hy + 1.4, SNOUT_RX, SNOUT_RY, belly, OUTLINE);
+      ell(ctx, hx + SNOUT_OFFSET * flip, hy + 1.4, SNOUT_RX, SNOUT_RY, rgba(belly, 0.95), OUTLINE, 0, 1.2);
       // nose
       ctx.fillStyle = OUTLINE;
       ctx.fillRect(hx + 7 * flip, hy + 0.5, NOSE_SIZE, NOSE_SIZE);
@@ -237,6 +274,6 @@ export function makeQuadrupedSheet(scene: Phaser.Scene, key: string, cfg: Quadru
     }
   });
 
-  registerFrames(scene, key, canvas, QUAD_W, QUAD_H, names);
+  registerFrames(scene, key, sheet.canvas, QUAD_W, QUAD_H, names, sheet.scale);
   return names.slice();
 }

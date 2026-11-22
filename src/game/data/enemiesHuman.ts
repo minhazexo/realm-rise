@@ -101,6 +101,24 @@ export const BOSSES: Record<string, EnemyDef> = {
     loot: [ { id: 'ancient_core', chance: 1, min: 1, max: 1 }, { id: 'moonstone', chance: 0.7, min: 1, max: 2 }, { id: 'legendary_aegis', chance: 0.5, min: 1, max: 1 } ],
     goldDrop: 800
   },
+  toll_keeper: {
+    key: 'toll_keeper', name: 'The Toll Keeper', sheetKey: 'hu_brute', scale: 1.55, team: ENEMY_TEAMS.bandit,
+    boss: true, arenaRadius: 540,
+    hp: 780, atk: 28, def: 11, speed: 118, detect: 900, attackRange: 56, attackCd: 1.35,
+    windupSec: 0.55, radius: 22, xp: 480,
+    style: 'boss',
+    weak: ['lightning'], resist: ['physical'],
+    // Teaches the chain (slow, wide slam), then adds the toll: guards called in
+    // and a faster tempo once the gate is contested.
+    phases: [
+      { belowHp: 1, moves: ['slam', 'combo_charge'] },
+      { belowHp: 0.6, moves: ['slam', 'summon_guards', 'throw_axe'], summon: { type: 'bandit_swordsman', count: 2 } },
+      { belowHp: 0.3, moves: ['slam', 'combo_charge', 'summon_guards'], enrageSpeed: 1.2, summon: { type: 'bandit_archer', count: 1 } }
+    ],
+    palette: { skin: '#b98a63', cloth: '#3f4a58', iron: true, chain: true },
+    loot: [ { id: 'steel_plate', chance: 0.5, min: 1, max: 1 }, { id: 'merchant_signet', chance: 0.35, min: 1, max: 1 }, { id: 'royal_artifact', chance: 1, min: 1, max: 1 }, { id: 'repair_kit', chance: 1, min: 1, max: 2 } ],
+    goldDrop: 420
+  },
   warden_of_ash: {
     key: 'warden_of_ash', name: 'The Warden of Ash', sheetKey: 'hu_captain', scale: 1.5, team: ENEMY_TEAMS.monster,
     boss: true, arenaRadius: 560,

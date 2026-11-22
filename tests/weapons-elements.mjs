@@ -9,11 +9,11 @@ const ok = (cond, label) => { if (cond) { passed++; } else { failed++; console.e
 // ── Import the TS modules via the project's node loader pattern ──
 // (other suites import compiled .ts directly with node's type-stripping)
 const { ELEMENTS, isElement, elementalDamage, statusFor, applyStatus, tickStatuses, newStatusState, WEAK_MULT, RESIST_MULT, statusMoveMult, damageTakenMult } =
-  await import('../src/game/systems/ElementalSystem.ts');
-const { resolveSpecial, isUndead } = await import('../src/game/systems/WeaponSpecials.ts');
+  await import('../src/game/systems/combat/ElementalSystem.ts');
+const { resolveSpecial, isUndead } = await import('../src/game/systems/combat/WeaponSpecials.ts');
 const { getItem, ITEMS } = await import('../src/game/data/items.ts');
 const allItems = () => Object.values(ITEMS);
-const { migrateSave } = await import('../src/game/systems/SaveSystem.ts');
+const { migrateSave } = await import('../src/game/systems/persistence/SaveSystem.ts');
 
 console.log('— ElementalSystem —');
 // Resist/weak math
@@ -100,7 +100,7 @@ for (const it of allItems()) {
   if (it.weapon.element) ok(VALID_ELEMENTS.has(it.weapon.element) || it.weapon.element === 'arcane', `${it.id}: valid element (${it.weapon.element})`);
   if (it.weapon.style === 'bow') ok(!!it.weapon.ammo, `${it.id}: bow declares ammo`);
   if (it.weapon.style === 'staff') ok(typeof it.weapon.manaCost === 'number', `${it.id}: staff declares mana cost`);
-  if (it.weapon.special) ok(['voidfang', 'chain_lightning', 'gravekeeper', 'dawnbreaker'].includes(it.weapon.special), `${it.id}: known special (${it.weapon.special})`);
+  if (it.weapon.special) ok(['voidfang', 'chain_lightning', 'gravekeeper', 'dawnbreaker', 'cleave', 'shadowfang'].includes(it.weapon.special), `${it.id}: known special (${it.weapon.special})`);
 }
 ok(weaponsChecked >= 20, `weapon count sane (${weaponsChecked})`);
 // Category identities from the brief

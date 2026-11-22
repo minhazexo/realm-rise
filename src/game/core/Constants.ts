@@ -83,7 +83,22 @@ export const DAYNIGHT_CONFIG = {
   nightDetectionMult: 0.75
 };
 
+/** Canonical dawn/dusk thresholds (fraction of day). Single source of truth
+ * so sky visuals and gameplay night never drift apart at the edges. */
+export const DAWN = 0.24;
+export const DUSK = 0.78;
+
+/** Shared night/golden-hour predicates — reuse everywhere. */
+export function isNightAt(t: number): boolean {
+  return t > DUSK || t < DAWN;
+}
+export function isGoldenAt(t: number): boolean {
+  return (t > 0.22 && t < 0.32) || (t > 0.72 && t < 0.82);
+}
+
 export const WEATHER_CONFIG = {
+  // Keep the first weather stable long enough for the player to read the
+  // world. EnvSystem also uses this range for every subsequent change.
   changeEveryMin: 150,
   changeEveryMax: 340
 };

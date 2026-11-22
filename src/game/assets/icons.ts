@@ -10,7 +10,7 @@
 // iconShapesB.js (resources/food/consumables).
 // ─────────────────────────────────────────────────────────────────────────────
 import { ITEMS } from '../data/items.ts';
-import { makeCanvas } from './artCore.ts';
+import { makeCanvas, displayAtNativeSize } from './artCore.ts';
 import { ITEM_ARTWORK, itemArtworkKey } from './itemArtwork.ts';
 import { SHAPES_A } from './iconShapesA.ts';
 import { SHAPES_B } from './iconShapesB.ts';
@@ -42,7 +42,9 @@ export function buildItemIcons(scene: Phaser.Scene): true {
   const ids = Object.keys(ITEMS);
   const cols = 8;
   const rows = Math.ceil(ids.length / cols);
-  const { canvas, ctx } = makeCanvas(cols * CELL, rows * CELL);
+  // Art scale: the atlas (and every React-facing PNG cropped out of it) holds
+  // `scale`× the texels while each icon frame still displays at CELL × CELL.
+  const { canvas, ctx, scale } = makeCanvas(cols * CELL, rows * CELL);
 
   // Idempotent guard
   if (scene.textures.exists('item_icons')) return true;
@@ -77,17 +79,19 @@ export function buildItemIcons(scene: Phaser.Scene): true {
     }
     ctx.restore();
 
-    // Register named frame for Phaser
+    // Register named frame for Phaser (display size stays CELL × CELL)
     if (!tex.has(`${id}_frame`)) {
-      tex.add(`${id}_frame`, 0, ox, oy, CELL, CELL);
+      const frame = tex.add(`${id}_frame`, 0, ox * scale, oy * scale, CELL * scale, CELL * scale);
+      displayAtNativeSize(frame, CELL, CELL, scale);
     }
 
-    // Crop into standalone PNG dataURL for the React layer
+    // Crop into standalone PNG dataURL for the React layer — at full authoring
+    // resolution, so the icons stay sharp in the DOM at any UI scale.
     const c2 = document.createElement('canvas');
-    c2.width = CELL;
-    c2.height = CELL;
+    c2.width = CELL * scale;
+    c2.height = CELL * scale;
     const c2ctx = c2.getContext('2d') as CanvasRenderingContext2D;
-    c2ctx.drawImage(canvas, ox, oy, CELL, CELL, 0, 0, CELL, CELL);
+    c2ctx.drawImage(canvas, ox * scale, oy * scale, CELL * scale, CELL * scale, 0, 0, CELL * scale, CELL * scale);
     iconDataURLs[id] = c2.toDataURL('image/png');
   });
 

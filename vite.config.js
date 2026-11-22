@@ -8,7 +8,10 @@ export default defineConfig({
   server: {
     port: 3000,
     open: false,
-    host: true
+    host: true,
+    // Desktop/package output lives inside the project; watching it made Vite
+    // read Electron's DLLs and crash. Source changes still hot-reload.
+    watch: { ignored: ['**/release/**', '**/dist/**', '**/src-tauri/target/**'] }
   },
   build: {
     target: 'es2022',

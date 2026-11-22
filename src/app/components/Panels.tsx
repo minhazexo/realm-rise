@@ -9,6 +9,7 @@ import type { JSX } from 'react';
 import GameState from '../../game/core/GameState.ts';
 import { CH } from '../../game/core/EventBus.ts';
 import * as panels from './panels/index.ts';
+import RulerPanel from './screens/RulerPanel.tsx';
 
 interface PanelsProps {
   panel: string | null | undefined;
@@ -25,7 +26,8 @@ const BY_NAME: Record<string, () => JSX.Element | null> = {
   character: panels.CharacterPanel,
   save: panels.SavePanel,
   trade: panels.TradePanel,
-  pause: panels.PausePanel
+  pause: panels.PausePanel,
+  ruler: RulerPanel
 };
 
 export default function Panels({ panel }: PanelsProps): JSX.Element | null {

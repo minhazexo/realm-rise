@@ -2,7 +2,7 @@
 import type { JSX } from 'react';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
-import { questStateSnapshot } from '../../../game/systems/QuestSystem.ts';
+import { questStateSnapshot } from '../../../game/systems/narrative/QuestSystem.ts';
 import type { JournalSnapshot } from './types.ts';
 
 /* ── Journal ──────────────────────────────────────────────────────────── */

@@ -4,8 +4,10 @@ import GameState from '../../../game/core/GameState.ts';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
 import { getItem } from '../../../game/data/items.ts';
-import { buyOffer, makeContext, merchantStock, sellUnit } from '../../../game/systems/EconomySystem.ts';
-import type { PriceContext } from '../../../game/systems/EconomySystem.ts';
+import { buyOffer, makeContext, merchantStock, sellUnit } from '../../../game/systems/economy/EconomySystem.ts';
+import type { PriceContext } from '../../../game/systems/economy/EconomySystem.ts';
+import { factionBonus } from '../../../game/systems/economy/FactionSystem.ts';
+import { policyTradeBonus } from '../../../game/systems/economy/PolicySystem.ts';
 import { biomeAt } from '../../../game/world/worldGen.ts';
 import type { InventoryEntry } from './types.ts';
 import type { TradeOffer } from './types.ts';
@@ -15,11 +17,19 @@ import { uiSession } from './shared.tsx';
 /* ── Trade ────────────────────────────────────────────────────────────── */
 export function TradePanel(): JSX.Element {
   const npc: any = uiSession.tradeNpc;
-  const data = useGameState([CH.INVENTORY, CH.PLAYER], () => {
+  const data = useGameState([CH.INVENTORY, CH.PLAYER, CH.FACTIONS, CH.SETTLEMENT], () => {
     const S: any = GameState.s;
     let biomeId = 'forest';
     try { biomeId = biomeAt(S.world.px, S.world.py); } catch { /* default */ }
-    const ctx: any = makeContext({ biomeId, marketTier: S.settlement?.stageIndex || 0 });
+    // Full price context: player trade perks + allied faction terms + the
+    // realm's market tier — exploration, diplomacy and kingdom all move prices.
+    let tradeBonusPct = 0;
+    let factionBonusPct = 0;
+    let marketTier = S.settlement?.stageIndex || 0;
+    try { tradeBonusPct = S.player?.derived?.tradeBonus ?? 0; } catch { /* default */ }
+    try { factionBonusPct = (factionBonus() ?? 0) + policyTradeBonus(); } catch { /* default */ }
+    try { marketTier = (GameState.session as any)?.kingdom?.marketTier ?? marketTier; } catch { /* default */ }
+    const ctx: any = makeContext({ biomeId, tradeBonusPct, factionBonusPct, marketTier });
     const stock: TradeOffer[] = merchantStock(ctx);
     const sellable: InventoryEntry[] = (S.inventory || []).filter((e: InventoryEntry) => {
       const d: any = getItem(e.id);

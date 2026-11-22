@@ -5,7 +5,7 @@
 // Data declares, systems interpret: a region module owns its own coordinates,
 // names and pure geometry helpers and hands them over as one RegionDef. Nothing
 // in systems/ imports a region by name, so authoring another region means a new
-// data module plus one line in systems/RegionRegistry.ts.
+// data module plus one line in systems/world/RegionRegistry.ts.
 //
 // Pure types + one derivation: no Phaser, no scene. Unit-testable in node.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ export interface PropSpec {
    *          authored clear of the path so it never sits where you walk
    *   'fg' — near-camera foliage IN FRONT of the player, placed ON the path so
    *          it passes over the hero (the foreground band fades what you are
-   *          behind — see systems/RegionForeground.ts)
+   *          behind — see systems/world/RegionForeground.ts)
    * Omitted = the gameplay band: y-sorted with actors, the layer you fight in.
    */
   band?: 'bg' | 'fg';
@@ -219,6 +219,44 @@ export interface RegionArena {
   flag: string;
 }
 
+/**
+ * Where a region sits in the world (docs/WORLD-MAP.md §4). Regions are placed
+ * inside the biome band that matches them and are kept apart so their footprints
+ * never overlap; the anchor is what makes "which region am I standing in"
+ * answerable without any system naming a region.
+ */
+export interface RegionAnchor {
+  /** The region's own id, so an anchor is never a second identity. */
+  id: string;
+  /** Name the player is told when they cross into it. */
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+/**
+ * The one place in a region the player may travel to: it IS a POI of that
+ * region, so its position, name and map marker have a single source of truth.
+ * Travel unlocks on arrival rather than being a second state to keep.
+ */
+export interface RegionWaypoint {
+  /** POI id this waypoint is (must exist in the region's `pois`). */
+  poi: string;
+}
+
+/**
+ * A waypoint resolved for travel: the authored reference plus the POI's own
+ * position and label, so nothing downstream re-reads the poi list.
+ */
+export interface WaypointPoint extends RegionWaypoint {
+  /** The region that provides it (the id fast travel keys on). */
+  region: string;
+  label: string;
+  x: number;
+  y: number;
+}
+
 /** A crafting station the region itself provides (hub anvils, camp forges). */
 export interface StationPoint {
   station: string;
@@ -246,6 +284,13 @@ export interface RegionDef {
   pois?: RegionPoi[];
   /** The region's boss arena, if it has one. */
   arena?: RegionArena;
+  /**
+   * The region's footprint in the atlas. Systems use it to answer which region
+   * the player is in (RegionTravel) — a region is never named by a system.
+   */
+  anchor?: RegionAnchor;
+  /** The place fast travel lands, unlocked on arrival. */
+  waypoint?: RegionWaypoint;
   /** Which sub-region contains a point (nearest containing circle). */
   subregionAt(x: number, y: number): SubRegion | null;
   /** Encounters that should fire for a player at this position. */
@@ -263,6 +308,20 @@ export function stationsOf(def: RegionDef): StationPoint[] {
   return def.interactables
     .filter((it: Interactable) => it.kind === 'station' && !!it.station)
     .map((it: Interactable) => ({ station: it.station as string, x: it.x, y: it.y }));
+}
+
+/**
+ * The travel point a region provides, resolved against its own POIs — the
+ * authored reference plus the position and label of the POI it names, so the
+ * map, the fog and fast travel all point at the same place. A region that names
+ * a POI it does not declare resolves to nothing (tests/regions.mjs pins it).
+ */
+export function waypointsOf(def: RegionDef): WaypointPoint[] {
+  const wp: RegionWaypoint | undefined = def.waypoint;
+  if (!wp) return [];
+  const poi: RegionPoi | undefined = (def.pois ?? []).find((p: RegionPoi) => p.id === wp.poi);
+  if (!poi) return [];
+  return [{ region: def.id, poi: wp.poi, label: poi.label, x: poi.x, y: poi.y }];
 }
 
 /**

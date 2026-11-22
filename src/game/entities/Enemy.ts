@@ -6,12 +6,13 @@
 import Phaser from 'phaser';
 import GameState from '../core/GameState.ts';
 import { Bus } from '../core/EventBus.ts';
-import { shakeAllowed } from '../systems/SettingsSystem.ts';
-import { applyBreathing } from '../systems/BreathingFX.ts';
+import { shakeAllowed } from '../systems/environment/SettingsSystem.ts';
+import { applyBreathing } from '../systems/environment/BreathingFX.ts';
 import { DIFFICULTY } from '../core/Constants.ts';
 import { getEnemyDef } from '../data/enemies.ts';
-import { grantKillReward } from '../systems/KillReward.ts';
-import * as ElementalSystem from '../systems/ElementalSystem.ts';
+import { isNightAt } from '../systems/environment/EnvSystem.ts';
+import { grantKillReward } from '../systems/combat/KillReward.ts';
+import * as ElementalSystem from '../systems/combat/ElementalSystem.ts';
 
 const STATE = Object.freeze({ IDLE: 0, PATROL: 1, DETECT: 2, CHASE: 3, ATTACK: 4, RETREAT: 5, SEARCH: 6, DEAD: 7 });
 
@@ -24,7 +25,7 @@ export default class Enemy {
   sprite!: Phaser.Physics.Arcade.Sprite;
   scale: number = 1;
   /** Elemental status effects (burn/chill/shock/poison) — ElementalSystem owns the math. */
-  statuses: import('../systems/ElementalSystem.ts').StatusState = ElementalSystem.newStatusState();
+  statuses: import('../systems/combat/ElementalSystem.ts').StatusState = ElementalSystem.newStatusState();
   shadow!: Phaser.GameObjects.Image | null;
   maxHp: number = 0;
   hp: number = 0;
@@ -120,7 +121,6 @@ export default class Enemy {
     this._hpBarH = this.boss ? 6 : 4.5;
     this._hpBarY = isQuad ? -14 : -18;
     this.setupHealthBar();
-    Bus.emit('enemy-spawned', { key: defKey });
   }
 
   get player(): any {
@@ -468,7 +468,7 @@ export default class Enemy {
   }
 
 /* ── Damage, death & loot ─────────────────────────────────────────────── */
-  takeDamage(amount: number, srcX?: number | null, srcY?: number | null, floaters?: any, crit?: boolean, element?: string, special?: import('../systems/WeaponSpecials.ts').SpecialResult | null): number {
+  takeDamage(amount: number, srcX?: number | null, srcY?: number | null, floaters?: any, crit?: boolean, element?: string, special?: import('../systems/combat/WeaponSpecials.ts').SpecialResult | null): number {
     if (this.dead) return 0;
     if (this.state === STATE.IDLE || this.state === STATE.PATROL) this.enterChase();
     // ── Elemental pass: resist/weak multipliers + status infliction ──
@@ -559,8 +559,9 @@ export default class Enemy {
   }
 
   isDay(): boolean {
-    const t: number = GameState.s.world.timeOfDay;
-    return t > 0.28 && t < 0.72;
+    // Shared night predicate so combat buffs agree with the sky — the old
+    // 0.28–0.72 window disagreed with visuals by ~10 game-minutes at edges.
+    return !isNightAt(GameState.s.world.timeOfDay);
   }
 }
 

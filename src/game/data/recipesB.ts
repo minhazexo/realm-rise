@@ -41,7 +41,34 @@ export const RECIPES_B: RecipeDef[] = [
   { id: 'steel_ingot_x5', out: 'steel_ingot', qty: 5, cat: 'process', station: 'forge', cost: { iron_ingot: 10, coal: 15 } },
 
   { id: 'ancient_sigil', out: 'ancient_sigil', qty: 1, cat: 'special', station: 'workshop', flag: 'ancient_studies',
-    cost: { crystal: 4, ancient_relic: 2, moonstone: 1 } }
+    cost: { crystal: 4, ancient_relic: 2, moonstone: 1 } },
+
+  // ── ARPG weapon lines (every weapon in data/weaponsArpg.ts has a path here) ──
+  // The dagger/dual/staff/legendary lines shipped as data with no acquisition
+  // at all — they looked craftable and were not. Each recipe below is the one
+  // way to get its weapon, and its flag ties the weapon to the story beat that
+  // makes it plausible.
+  { id: 'bone_dagger', out: 'bone_dagger', qty: 1, cat: 'weapons', cost: { bone: 3, flint: 2, fiber: 2 } },
+  { id: 'twin_cutlasses', out: 'twin_cutlasses', qty: 1, cat: 'weapons', station: 'forge', cost: { iron_ingot: 3, hardwood: 2 } },
+  { id: 'apprentice_staff', out: 'apprentice_staff', qty: 1, cat: 'weapons', station: 'workshop', cost: { hardwood: 4, crystal: 1, fiber: 6 } },
+  { id: 'shadow_fang', out: 'shadow_fang', qty: 1, cat: 'weapons', station: 'workshop', flag: 'shard_hollow_taken',
+    cost: { void_ember: 3, steel_ingot: 3, leather_hide: 2 }, desc: 'Void Ember folded into steel. It remembers the Hollow.' },
+  { id: 'embersong_twins', out: 'embersong_twins', qty: 1, cat: 'weapons', station: 'forge', flag: 'shard_ash_taken',
+    cost: { ash_ember: 4, steel_ingot: 4 }, desc: 'Pyre-ash quenched blades. The heat never quite leaves them.' },
+  { id: 'stormshard_staff', out: 'stormshard_staff', qty: 1, cat: 'weapons', station: 'workshop', flag: 'shard_watch_taken',
+    cost: { crystal: 3, steel_ingot: 4, silver: 2 }, desc: 'A garrison storm-lens cased in steel.' },
+  { id: 'voidfang', out: 'voidfang', qty: 1, cat: 'special', station: 'workshop', flag: 'ancient_studies',
+    cost: { void_ember: 4, ancient_relic: 3, steel_ingot: 6 }, desc: 'A dagger that eats the light of the thing it cuts.' },
+  { id: 'stormpiercer', out: 'stormpiercer', qty: 1, cat: 'special', station: 'workshop', flag: 'ancient_studies',
+    cost: { crystal: 5, silver: 3, steel_ingot: 5 }, desc: 'A spear built to carry a storm down its length.' },
+  { id: 'gravekeeper', out: 'gravekeeper', qty: 1, cat: 'special', station: 'workshop', flag: 'warden_slain',
+    cost: { ash_ember: 6, ancient_core: 1, steel_ingot: 6 }, desc: 'Consecrated in the Warden’s own pyre.' },
+  { id: 'royal_armor', out: 'royal_armor', qty: 1, cat: 'armor', station: 'workshop', flag: 'policy_banner',
+    cost: { steel_ingot: 12, gold_nugget: 6 }, desc: 'Warplate for the ruler your banner promised.' },
+  { id: 'crown_realm', out: 'crown_realm', qty: 1, cat: 'armor', station: 'workshop', flag: 'barrier_restored',
+    cost: { royal_artifact: 1, gold_nugget: 8, ancient_core: 1 }, desc: 'The realm’s crown, reforged to be worn rather than kept in a box.' },
+  { id: 'merchant_signet', out: 'merchant_signet', qty: 1, cat: 'special', station: 'workshop', flag: 'policy_pragmatism',
+    cost: { gold_nugget: 4, silver: 4 }, desc: 'League paper in ring form. Every purse opens a little wider.' }
 ];
 
 export const RECIPE_CATS = ['survival', 'cooking', 'tools', 'weapons', 'armor', 'process', 'special'];

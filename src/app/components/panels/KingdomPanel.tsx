@@ -3,8 +3,10 @@ import type { JSX } from 'react';
 import GameState from '../../../game/core/GameState.ts';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
-import { militaryPowerTotal, stageRequirementsMissing, territoryPct } from '../../../game/systems/KingdomSystem.ts';
-import { canRecruitUnit, recruitUnit } from '../../../game/systems/KingdomEconomy.ts';
+import { militaryPowerTotal, stageRequirementsMissing, territoryPct, assignWorker } from '../../../game/systems/economy/KingdomSystem.ts';
+import { canRecruitUnit, recruitUnit } from '../../../game/systems/world/KingdomEconomy.ts';
+import { repairBuilding } from '../../../game/systems/economy/BuildSystem.ts';
+import { getBuildingDef } from '../../../game/data/buildings.ts';
 import { MILITARY_CONFIG } from '../../../game/core/Constants.ts';
 import type { CitizenInfo } from './types.ts';
 import { uiSession } from './shared.tsx';
@@ -15,11 +17,29 @@ export function KingdomPanel(): JSX.Element | null {
     const S: any = GameState.s;
     const K: any = uiSession.kingdom || {};
     const citizens: CitizenInfo[] = S?.settlement?.citizens || [];
+    const buildings: any[] = S?.settlement?.buildings || [];
+    const selectedBuilding: string | null = (GameState.session as any)?.selectedBuilding ?? null;
     const req: any = (() => { try { return stageRequirementsMissing(); } catch { return {}; } })();
     const pct: number = (() => { try { return territoryPct(); } catch { return 0; } })();
-    return { S, K, citizens, req, pct, mil: { ...S?.settlement?.military }, founded: S?.settlement?.founded };
-  }) as { S: any; K: any; citizens: CitizenInfo[]; req: any; pct: number; mil: Record<string, number>; founded?: boolean } | null;
+    return { S, K, citizens, buildings, selectedBuilding, req, pct, mil: { ...S?.settlement?.military }, founded: S?.settlement?.founded };
+  }) as { S: any; K: any; citizens: CitizenInfo[]; buildings: any[]; selectedBuilding: string | null; req: any; pct: number; mil: Record<string, number>; founded?: boolean } | null;
   if (!k || !k.S) return null;
+
+  const doRepair = (uid: string): void => {
+    const b = (k.buildings || []).find((x: any) => x.uid === uid);
+    if (!b) return;
+    import('../../../game/main.ts').then((m: any) => {
+      try {
+        const scene = m.worldScene?.();
+        if (scene) repairBuilding(scene, b);
+      } catch { /* repair never crashes the panel */ }
+    }).catch(() => {});
+  };
+  const doAssign = (citizenUid: string, buildingUid: string): void => {
+    try {
+      assignWorker(buildingUid, citizenUid || null);
+    } catch { /* assignment never crashes the panel */ }
+  };
 
   const stageName: string = ['Wanderer','Camp','Village','Town','City','Kingdom','Empire'][k.S.settlement.stageIndex + 1] ?? '';
 
@@ -63,12 +83,48 @@ export function KingdomPanel(): JSX.Element | null {
         </div>
         <h3>People</h3>
         <div className="citizen-list">
-          {k.citizens.map((c) => (
-            <div key={c.uid} className="citizen">
-              <b>{c.name}</b> <span>{c.role} · ♥{(c.skillLv ?? 1) * 10}</span>
-            </div>
-          ))}
+          {k.citizens.map((c) => {
+            const held = (k.buildings || []).find((b: any) => b.workerUid === c.uid);
+            return (
+              <div key={c.uid} className="citizen">
+                <b>{c.name}</b> <span>{c.role} · ♥{(c.skillLv ?? 1) * 10}</span>
+                <select
+                  aria-label={`Assign ${c.name}`}
+                  value={held?.uid || ''}
+                  onChange={(e) => {
+                    const to: string = (e.target as HTMLSelectElement).value;
+                    if (held) doAssign(held.uid, '');
+                    if (to) doAssign(to, c.uid || '');
+                  }}
+                >
+                  <option value="">Unassigned</option>
+                  {(k.buildings || []).filter((b: any) => b.complete).map((b: any) => (
+                    <option key={b.uid} value={b.uid}>
+                      {(getBuildingDef(b.key)?.label || b.key) + (b.workerUid && b.workerUid !== c.uid ? ' (taken)' : '')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
         </div>
+        {k.selectedBuilding && (() => {
+          const b = (k.buildings || []).find((x: any) => x.uid === k.selectedBuilding);
+          if (!b) return null;
+          const def: any = getBuildingDef(b.key);
+          const maxHp: number = def?.hp || 100;
+          const hp: number = b.hp ?? maxHp;
+          const full: boolean = hp >= maxHp;
+          return (
+            <div className="selected-building">
+              <h3>Selected: {def?.label || b.key}</h3>
+              <div>Integrity {Math.round(hp)}/{maxHp} ({Math.round((hp / maxHp) * 100)}%)</div>
+              <button className="btn btn-small" disabled={full} onClick={() => b.uid && doRepair(b.uid)}>
+                {full ? 'Pristine' : 'Repair (1 Wood + 1 Stone)'}
+              </button>
+            </div>
+          );
+        })()}
       </>}
     </div>
   );

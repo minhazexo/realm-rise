@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import GameState from '../../../game/core/GameState.ts';
-import { deleteSlot, exportSlot, importSlotData, listSaves, loadFromSlot, saveToSlot } from '../../../game/systems/SaveSystem.ts';
+import { deleteSlot, exportSlot, importSlotData, listSaves, loadFromSlot, saveToSlot } from '../../../game/systems/persistence/SaveSystem.ts';
 import type { SaveSummary } from './types.ts';
 
 /* ── Save / Load + export / import ────────────────────────────────────── */

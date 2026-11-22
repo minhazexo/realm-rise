@@ -4,19 +4,19 @@ import type { JSX } from 'react';
 import GameState from '../game/core/GameState.ts';
 import { CH } from '../game/core/EventBus.ts';
 import { useGameState } from '../hooks/useGameState.ts';
-import MainMenu from './components/MainMenu.tsx';
-import CharacterCreation from './components/CharacterCreation.tsx';
-import IntroOverlay from './components/IntroOverlay.tsx';
-import HUD from './components/HUD.tsx';
-import Toasts from './components/Toasts.tsx';
+import MainMenu from './components/screens/MainMenu.tsx';
+import CharacterCreation from './components/screens/CharacterCreation.tsx';
+import IntroOverlay from './components/screens/IntroOverlay.tsx';
+import HUD from './components/hud/HUD.tsx';
+import Toasts from './components/hud/Toasts.tsx';
 // Overlays is the one home for the world HUD surfaces; import from it directly
 // rather than through per-surface re-export shims (deleted 2026-09-23).
-import { FirstSteps, ZoomControls, Dialogue, QuestTracker, Minimap, BossBar, AchievementPopup } from './components/Overlays.tsx';
+import { FirstSteps, ZoomControls, Dialogue, QuestTracker, Minimap, BossBar, AchievementPopup } from './components/overlays/Overlays.tsx';
 import Panels from './components/Panels.tsx';
-import TouchControls from './components/TouchControls.tsx';
-import DeathOverlay from './components/DeathOverlay.tsx';
-import RulerPanel from './components/RulerPanel.tsx';
-import DebugPanel from './components/DebugPanel.tsx';
+import TouchControls from './components/hud/TouchControls.tsx';
+import DeathOverlay from './components/hud/DeathOverlay.tsx';
+import RulerPanel from './components/screens/RulerPanel.tsx';
+import DebugPanel from './components/debug/DebugPanel.tsx';
 
 interface AppUiSnapshot {
   screen?: string;

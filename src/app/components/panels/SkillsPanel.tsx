@@ -5,7 +5,7 @@ import GameState from '../../../game/core/GameState.ts';
 import { CH } from '../../../game/core/EventBus.ts';
 import { useGameState } from '../../../hooks/useGameState.ts';
 import { BRANCHES, SKILLS } from '../../../game/data/skills.ts';
-import { learnSkill, spendStat } from '../../../game/systems/ProgressionSystem.ts';
+import { learnSkill, spendStat } from '../../../game/systems/combat/ProgressionSystem.ts';
 import type { SkillDef } from './types.ts';
 import type { BranchDef } from './types.ts';
 

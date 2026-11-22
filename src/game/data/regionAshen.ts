@@ -9,12 +9,12 @@
 // the POIs fed into worldGen so discovery, minimap fog and quests all work.
 //
 // Pure data + pure helpers: no Phaser import, so it is unit-testable and the
-// scene-side work lives in systems/RegionSystem.ts and its siblings. The shapes
+// scene-side work lives in systems/world/RegionSystem.ts and its siblings. The shapes
 // below come from data/region.ts, the vocabulary every region shares.
 // ─────────────────────────────────────────────────────────────────────────────
 import type {
-  Encounter, Hazard, Interactable, Landmark, PropSpec, Puzzle, RegionDef,
-  RegionNpc, RegionPoi, SubRegion,
+  Encounter, Hazard, Interactable, Landmark, PropSpec, Puzzle, RegionAnchor, RegionDef,
+  RegionNpc, RegionPoi, RegionWaypoint, SubRegion,
 } from './region.ts';
 // The Five Realm Shards' geography (brief §14). The spine owns where each
 // fragment lies, who holds it and what it pays, so this region builds its shard
@@ -69,6 +69,18 @@ export const ASHEN_SUBREGIONS: SubRegion[] = [
 
 /** No enemy spawns inside this radius of the village centre (the safe hub). */
 export const ASHEN_SAFE_ZONE = { x: -90, y: 330, radius: 470 };
+
+/**
+ * The region's footprint in the frontier atlas (docs/WORLD-MAP.md §4): one
+ * circle that contains every authored area with room to spare, so crossing into
+ * it is answerable by geometry instead of by a system naming a region.
+ */
+export const ASHEN_ANCHOR: RegionAnchor = {
+  id: 'ashen_frontier', name: 'The Ashen Frontier', x: 200, y: -300, radius: 2200,
+};
+
+/** Fast travel lands at the hub — the one place in the region that is safe. */
+export const ASHEN_WAYPOINT: RegionWaypoint = { poi: 'ashen_village' };
 
 /** The hub's NPCs — offsets from their area's landmark, placed with the area. */
 export const ASHEN_NPCS: RegionNpc[] = [
@@ -749,11 +761,13 @@ export function encounterEnemyCount(): number {
 
 // ── The region as the runtime sees it ───────────────────────────────────────
 // Everything the scene-side systems need in one object: the authored data above
-// plus the geometry helpers that belong to it. `systems/RegionRegistry.ts`
+// plus the geometry helpers that belong to it. `systems/world/RegionRegistry.ts`
 // holds the list — this is the only shape a second region has to produce.
 
 export const ASHEN_REGION: RegionDef = {
   id: 'ashen_frontier',
+  anchor: ASHEN_ANCHOR,
+  waypoint: ASHEN_WAYPOINT,
   subregions: ASHEN_SUBREGIONS,
   landmarks: ASHEN_LANDMARKS,
   encounters: ASHEN_ENCOUNTERS,

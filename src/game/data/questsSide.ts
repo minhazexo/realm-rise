@@ -4,8 +4,10 @@ import type { QuestDef } from './questsMain.ts';
 export const SIDE_QUESTS: Record<string, QuestDef> = {
   sq_herbs_for_elara: {
     id: 'sq_herbs_for_elara', title: "Elara's Poultices", giver: 'elara',
+    intro: 'Elara does not ask for help; she mentions, to the air, that the wolves have been biting deeper this season and her stock of herbs is gone.',
     steps: [ { type: 'gather', item: 'herbs', count: 12, text: 'Gather 12 Herbs' }, { type: 'deliver', npc: 'elara', item: 'herbs', count: 12, text: 'Bring herbs to Elara' } ],
-    rewards: { xp: 90, items: { healing_salve: 2 }, rep: 6 }
+    rewards: { xp: 90, items: { healing_salve: 2 }, rep: 6 },
+    outro: 'She takes the bundle, smells it, and nods once. From Elara, a nod is a speech.'
   },
   sq_the_warden_of_ash: {
     id: 'sq_the_warden_of_ash', title: 'The Warden of Ash', giver: 'elara',
@@ -14,7 +16,8 @@ export const SIDE_QUESTS: Record<string, QuestDef> = {
       { type: 'reach', poiTag: 'warden_pyre', text: "Find the Warden's Pyre" },
       { type: 'boss', target: 'warden_of_ash', text: 'Defeat the Warden of Ash' }
     ],
-    rewards: { xp: 420, flagsSet: ['warden_slain'], items: { emberforged_blade: 1 } }
+    rewards: { xp: 420, flagsSet: ['warden_slain'], items: { emberforged_blade: 1 } },
+    outro: 'The pyre is dark for the first time in a hundred years. The blade you hammered from its crown-iron is still warm, and it hums when you face north.'
   },
   // The Ashen Frontier's spine quest (map brief §29): it walks the player
   // through every authored area in the order they were designed for.
@@ -32,7 +35,8 @@ export const SIDE_QUESTS: Record<string, QuestDef> = {
       { type: 'talk', npc: 'mara', text: 'Bring word back to Mara' },
       { type: 'boss', target: 'warden_of_ash', text: 'End the Warden of Ash' }
     ],
-    rewards: { xp: 520, gold: 160, rep: 12, items: { moonstone: 2, ancient_core: 1 }, flagsSet: ['ashen_frontier_cleared'] }
+    rewards: { xp: 520, gold: 160, rep: 12, items: { moonstone: 2, ancient_core: 1 }, flagsSet: ['ashen_frontier_cleared'] },
+    outro: 'Mara walks the road with you as far as the shrine and then stops, because she has never once gone past it. "You walked it," she says. "Now the frontier knows somebody still can."',
   },
   sq_broken_cart: {
     id: 'sq_broken_cart', title: 'The Broken Cart', eventOnly: true,
@@ -43,36 +47,47 @@ export const SIDE_QUESTS: Record<string, QuestDef> = {
       { label: 'Take the hauling fee (+40 gold)', fx: { gold: 40, rep: -4 } },
       { label: 'Not my problem…', fx: { rep: -8 } }
     ],
-    rewards: { xp: 80, rep: 10, gold: 30 }
+    rewards: { xp: 80, rep: 10, gold: 30 },
+    outro: 'The cart creaks away toward the coast with its wheels finally under it. The merchant’s cousin will tell this story badly, in a tavern, for years.'
   },
   sq_missing_hunter: {
     id: 'sq_missing_hunter', title: 'The Missing Hunter',
+    intro: 'A hunting camp that stopped sending smoke. Either the hunter moved on, or the hunter did not have a choice.',
     steps: [
       { type: 'reach', poiTag: 'crashed_camp', text: 'Find the hunter’s crashed camp' },
       { type: 'kill', enemy: 'wolf', count: 3, text: 'Drive off the wolf pack' },
       { type: 'talk', npc: 'rescue_hunter', text: 'Speak with the grateful hunter' }
     ],
-    rewards: { xp: 120, recruitRoll: true, rep: 5 }
+    rewards: { xp: 120, recruitRoll: true, rep: 5 },
+    outro: 'The hunter is alive, furious, and out of arrows. Give them a fire and a job and they will follow you further than they will ever admit.'
   },
   sq_clear_the_den: {
     id: 'sq_clear_the_den', title: 'Clear the Den', repeatable: false,
+    intro: 'Dire wolves do not share a wood politely. Clear the den before they decide your gate is part of it.',
     steps: [ { type: 'kill', enemy: 'dire_wolf', count: 2, text: 'Slay the Dire Wolves' } ],
-    rewards: { xp: 150, res: { fur_pelt: 3 } }
+    rewards: { xp: 150, res: { fur_pelt: 3 } },
+    outro: 'Two pelts, one clean den, and a silence in the trees that finally sounds like trees.'
   },
   sq_translation: {
     id: 'sq_translation', title: 'Words in Stone', giver: 'hob',
+    intro: 'Old Hob needs three more relics before he will say out loud what he already suspects. "I am not being mysterious," he says, being mysterious.',
     steps: [ { type: 'gather', item: 'ancient_relic', count: 3, text: 'Recover 3 Ancient Relics' }, { type: 'deliver', npc: 'hob', item: 'ancient_relic', count: 3, text: 'Deliver relics to Old Hob' } ],
-    rewards: { xp: 260, flagsSet: ['ancient_studies'], items: { sage_pendant: 1 } }
+    rewards: { xp: 260, flagsSet: ['ancient_studies'], items: { sage_pendant: 1 } },
+    outro: 'Hob lays the relics in a spiral and reads them without notes. Halfway through he stops, looks at you, and says: "Oh. It was never a wall. It was a covenant."'
   },
   sq_festival_provision: {
     id: 'sq_festival_provision', title: 'A Harvest Worth Dancing About', eventOnly: true,
+    intro: 'Mira is planning something with lanterns and too much bread. She needs wheat, and she needs it before the weather changes its mind.',
     steps: [ { type: 'deliver', npc: 'mira', item: 'wheat', count: 20, text: 'Deliver 20 Wheat for the festival' } ],
-    rewards: { xp: 100, happinessTown: 10, rep: 4 }
+    rewards: { xp: 100, happinessTown: 10, rep: 4 },
+    outro: 'The town dances badly and eats well. For one evening nobody counts the horizon, and that is the entire point of building one.',
   },
   sq_treasure_cache: {
     id: 'sq_treasure_cache', title: 'X Marks the Spot', itemOnly: true,
+    intro: 'Someone drew this map with more care than they drew most of their life. Follow it before the ink gives up.',
     steps: [ { type: 'useItem', itemId: 'treasure_map', text: 'Use a Treasure Map to reveal a cache' } ],
-    rewards: {}
+    rewards: {},
+    outro: 'The cache is smaller than the map promised and better than it deserved. Most maps are.'
   },
 
   // ── THE FIVE REALM SHARDS (brief §14) ──────────────────────────────────────

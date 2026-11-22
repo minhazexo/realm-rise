@@ -48,12 +48,31 @@ export const ITEM_ARTWORK: Readonly<Record<string, string>> = {
 
 export const itemArtworkKey = (id: string): string => `item_art_${id}`;
 
-/** Phaser waits for these local images before building the shared icon atlas. */
-export function preloadItemArtwork(scene: Phaser.Scene): void {
+/**
+ * Load item icons in the background — deliberately NOT through the scene
+ * loader.
+ *
+ * Phaser's loader stalled on the tail of this batch (41 files: 32 completed,
+ * 9 stuck populated, queue idle, scene never reached `create`), which left the
+ * game on a black world with no player. These icons are cosmetic: the icon
+ * atlas falls back to procedural art until they arrive, so gating world entry
+ * on them was never worth it. Each image is added to the texture manager as soon
+ * as it decodes, and a failure leaves the fallback in place.
+ */
+export function loadItemArtwork(scene: Phaser.Scene): void {
   for (const [id, file] of Object.entries(ITEM_ARTWORK)) {
     const key = itemArtworkKey(id);
-    if (!scene.textures.exists(key)) {
-      scene.load.image(key, `${import.meta.env.BASE_URL}assets/items/${file}`);
-    }
+    if (scene.textures.exists(key)) continue;
+    try {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        try {
+          if (!scene.textures.exists(key)) scene.textures.addImage(key, img);
+        } catch { /* procedural fallback stays */ }
+      };
+      img.onerror = () => { /* procedural fallback stays */ };
+      img.src = `${import.meta.env.BASE_URL}assets/items/${file}`;
+    } catch { /* no Image constructor: procedural fallback */ }
   }
 }

@@ -15,7 +15,7 @@ import Phaser from 'phaser';
 import { buildFxProps, buildMenuProps } from '../assets/propsFx.ts';
 import { buildNatureProps } from '../assets/propsNature1.ts';
 import { makePlayerSheet } from '../assets/index.ts';
-import { particleMultiplier, reducedMotion } from '../systems/SettingsSystem.ts';
+import { particleMultiplier, reducedMotion } from '../systems/environment/SettingsSystem.ts';
 
 /** One twinkling star. */
 export interface Star {
